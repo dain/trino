@@ -90,7 +90,7 @@ public final class OperatorAssertion
     {
         ImmutableList.Builder<Page> outputPages = ImmutableList.builder();
 
-        for (int loopsSinceLastPage = 0; !operator.isFinished() && loopsSinceLastPage < 1_000; loopsSinceLastPage++) {
+        for (int loopsSinceLastPage = 0; !operator.isFinished() && loopsSinceLastPage < 10; loopsSinceLastPage++) {
             if (handledBlocked(operator)) {
                 continue;
             }

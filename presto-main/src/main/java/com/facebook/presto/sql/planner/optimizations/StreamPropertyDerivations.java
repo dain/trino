@@ -47,6 +47,7 @@ import com.facebook.presto.sql.planner.plan.SampleNode;
 import com.facebook.presto.sql.planner.plan.SemiJoinNode;
 import com.facebook.presto.sql.planner.plan.SortNode;
 import com.facebook.presto.sql.planner.plan.TableFinishNode;
+import com.facebook.presto.sql.planner.plan.TableFunctionCall;
 import com.facebook.presto.sql.planner.plan.TableScanNode;
 import com.facebook.presto.sql.planner.plan.TableWriterNode;
 import com.facebook.presto.sql.planner.plan.TopNNode;
@@ -151,6 +152,13 @@ final class StreamPropertyDerivations
         protected StreamProperties visitPlan(PlanNode node, List<StreamProperties> inputProperties)
         {
             throw new UnsupportedOperationException("not yet implemented: " + node.getClass().getName());
+        }
+
+        @Override
+        public StreamProperties visitTableFunctionCall(TableFunctionCall node, List<StreamProperties> inputProperties)
+        {
+            return Iterables.getOnlyElement(inputProperties)
+                    .translate(symbol -> Optional.empty());
         }
 
         //

@@ -28,9 +28,9 @@ import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.sql.analyzer.SemanticException;
 import com.facebook.presto.sql.planner.ParameterRewriter;
 import com.facebook.presto.sql.tree.Call;
-import com.facebook.presto.sql.tree.CallArgument;
 import com.facebook.presto.sql.tree.Expression;
 import com.facebook.presto.sql.tree.ExpressionTreeRewriter;
+import com.facebook.presto.sql.tree.SqlArgument;
 import com.facebook.presto.transaction.TransactionManager;
 import com.google.common.util.concurrent.ListenableFuture;
 
@@ -68,7 +68,12 @@ public class CallTask
     }
 
     @Override
-    public ListenableFuture<?> execute(Call call, TransactionManager transactionManager, Metadata metadata, AccessControl accessControl, QueryStateMachine stateMachine, List<Expression> parameters)
+    public ListenableFuture<?> execute(Call call,
+            TransactionManager transactionManager,
+            Metadata metadata,
+            AccessControl accessControl,
+            QueryStateMachine stateMachine,
+            List<Expression> parameters)
     {
         if (!stateMachine.isAutoCommit()) {
             throw new PrestoException(NOT_SUPPORTED, "Procedures cannot be called within a transaction (use autocommit mode)");
@@ -87,7 +92,7 @@ public class CallTask
         }
 
         // per specification, do not allow mixing argument types
-        Predicate<CallArgument> hasName = argument -> argument.getName().isPresent();
+        Predicate<SqlArgument> hasName = argument -> argument.getName().isPresent();
         boolean anyNamed = call.getArguments().stream().anyMatch(hasName);
         boolean allNamed = call.getArguments().stream().allMatch(hasName);
         if (anyNamed && !allNamed) {
@@ -95,9 +100,9 @@ public class CallTask
         }
 
         // get the argument names in call order
-        Map<String, CallArgument> names = new LinkedHashMap<>();
+        Map<String, SqlArgument> names = new LinkedHashMap<>();
         for (int i = 0; i < call.getArguments().size(); i++) {
-            CallArgument argument = call.getArguments().get(i);
+            SqlArgument argument = call.getArguments().get(i);
             if (argument.getName().isPresent()) {
                 String name = argument.getName().get();
                 if (names.put(name, argument) != null) {
@@ -122,12 +127,12 @@ public class CallTask
 
         // get argument values
         Object[] values = new Object[procedure.getArguments().size()];
-        for (Entry<String, CallArgument> entry : names.entrySet()) {
-            CallArgument callArgument = entry.getValue();
+        for (Entry<String, SqlArgument> entry : names.entrySet()) {
+            SqlArgument callArgument = entry.getValue();
             int index = positions.get(entry.getKey());
             Argument argument = procedure.getArguments().get(index);
 
-            Expression expression = ExpressionTreeRewriter.rewriteWith(new ParameterRewriter(parameters), callArgument.getValue());
+            Expression expression = ExpressionTreeRewriter.rewriteWith(new ParameterRewriter(parameters), (Expression) callArgument.getValue());
             Type type = metadata.getType(argument.getType());
             checkCondition(type != null, INVALID_PROCEDURE_DEFINITION, "Unknown procedure argument type: %s", argument.getType());
 

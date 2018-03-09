@@ -606,6 +606,10 @@ public final class TypeRegistry
     public MethodHandle resolveOperator(OperatorType operatorType, List<? extends Type> argumentTypes)
     {
         requireNonNull(functionRegistry, "functionRegistry is null");
+        if (operatorType == OperatorType.CAST) {
+            checkArgument(argumentTypes.size() == 2, "CAST must have two argument types");
+            return functionRegistry.getScalarFunctionImplementation(functionRegistry.getCoercion(argumentTypes.get(0), argumentTypes.get(1))).getMethodHandle();
+        }
         return functionRegistry.getScalarFunctionImplementation(functionRegistry.resolveOperator(operatorType, argumentTypes)).getMethodHandle();
     }
 }

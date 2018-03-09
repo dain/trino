@@ -23,7 +23,6 @@ import com.facebook.presto.sql.tree.BetweenPredicate;
 import com.facebook.presto.sql.tree.BinaryLiteral;
 import com.facebook.presto.sql.tree.BooleanLiteral;
 import com.facebook.presto.sql.tree.Call;
-import com.facebook.presto.sql.tree.CallArgument;
 import com.facebook.presto.sql.tree.Cast;
 import com.facebook.presto.sql.tree.CharLiteral;
 import com.facebook.presto.sql.tree.CoalesceExpression;
@@ -109,6 +108,7 @@ import com.facebook.presto.sql.tree.ShowTables;
 import com.facebook.presto.sql.tree.SimpleGroupBy;
 import com.facebook.presto.sql.tree.SingleColumn;
 import com.facebook.presto.sql.tree.SortItem;
+import com.facebook.presto.sql.tree.SqlArgument;
 import com.facebook.presto.sql.tree.StartTransaction;
 import com.facebook.presto.sql.tree.Statement;
 import com.facebook.presto.sql.tree.StringLiteral;
@@ -1894,10 +1894,10 @@ public class TestSqlParser
     {
         assertStatement("CALL foo()", new Call(QualifiedName.of("foo"), ImmutableList.of()));
         assertStatement("CALL foo(123, a => 1, b => 'go', 456)", new Call(QualifiedName.of("foo"), ImmutableList.of(
-                new CallArgument(new LongLiteral("123")),
-                new CallArgument("a", new LongLiteral("1")),
-                new CallArgument("b", new StringLiteral("go")),
-                new CallArgument(new LongLiteral("456")))));
+                new SqlArgument(new LongLiteral("123")),
+                new SqlArgument("a", new LongLiteral("1")),
+                new SqlArgument("b", new StringLiteral("go")),
+                new SqlArgument(new LongLiteral("456")))));
     }
 
     @Test
@@ -2120,6 +2120,20 @@ public class TestSqlParser
                                 Optional.empty()),
                         Optional.empty(),
                         Optional.empty()));
+    }
+
+    @Test
+    public void testPolymorphicTableFunction()
+    {
+        assertStatement("SELECT * FROM TABLE (\n" +
+                        "    TRANSFORM(\n" +
+                        "        NAME => 'foo', \n" +
+                        "        INPUT => TABLE (\n" +
+                        "           SELECT * \n" +
+                        "           FROM (VALUES (1, 'a')) t(x, y)\n" +
+                        "        ),\n" +
+                        "        COLUMNS => DESCRIPTOR (A BIGINT, B VARCHAR(10))))",
+                query(new Values(ImmutableList.of())));
     }
 
     private static void assertCast(String type)

@@ -37,6 +37,7 @@ import com.facebook.presto.sql.planner.plan.JoinNode;
 import com.facebook.presto.sql.planner.plan.PlanNode;
 import com.facebook.presto.sql.planner.plan.ProjectNode;
 import com.facebook.presto.sql.planner.plan.SampleNode;
+import com.facebook.presto.sql.planner.plan.TableFunctionCall;
 import com.facebook.presto.sql.planner.plan.TableScanNode;
 import com.facebook.presto.sql.planner.plan.UnionNode;
 import com.facebook.presto.sql.planner.plan.UnnestNode;
@@ -62,11 +63,13 @@ import com.facebook.presto.sql.tree.QualifiedName;
 import com.facebook.presto.sql.tree.Query;
 import com.facebook.presto.sql.tree.QuerySpecification;
 import com.facebook.presto.sql.tree.Relation;
+import com.facebook.presto.sql.tree.RoutineInvocation;
 import com.facebook.presto.sql.tree.Row;
 import com.facebook.presto.sql.tree.SampledRelation;
 import com.facebook.presto.sql.tree.SetOperation;
 import com.facebook.presto.sql.tree.SymbolReference;
 import com.facebook.presto.sql.tree.Table;
+import com.facebook.presto.sql.tree.TableFunction;
 import com.facebook.presto.sql.tree.TableSubquery;
 import com.facebook.presto.sql.tree.Union;
 import com.facebook.presto.sql.tree.Unnest;
@@ -128,6 +131,32 @@ class RelationPlanner
         this.metadata = metadata;
         this.session = session;
         this.subqueryPlanner = new SubqueryPlanner(analysis, symbolAllocator, idAllocator, lambdaDeclarationToSymbolMap, metadata, session, analysis.getParameters());
+    }
+
+    @Override
+    protected RelationPlan visitTableFunction(TableFunction node, Void context)
+    {
+        RoutineInvocation invocation = node.getCall();
+        Analysis.TableFunctionAnalysis functionAnalysis = analysis.getTableFunction(invocation);
+
+        RelationPlan input = process(functionAnalysis.getInput(), context);
+
+        ImmutableList.Builder<Symbol> outputs = ImmutableList.builder();
+        for (Field field : functionAnalysis.getOutputType().getAllFields()) {
+            Symbol symbol = symbolAllocator.newSymbol(field.getName().orElse("expr"), field.getType());
+            outputs.add(symbol);
+        }
+
+        PlanNode plan = new TableFunctionCall(
+                idAllocator.getNextId(),
+                invocation.getName().toString(),
+                functionAnalysis.getHandle(),
+                functionAnalysis.isSingleNode(),
+                outputs.build(),
+                input.getFieldMappings(),
+                input.getRoot());
+
+        return new RelationPlan(plan, analysis.getScope(node), outputs.build());
     }
 
     @Override

@@ -11,21 +11,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.facebook.presto.connector.thrift.server;
+package com.facebook.presto.spi.function;
 
-import com.google.inject.Binder;
-import com.google.inject.Module;
-import com.google.inject.Scopes;
+import com.facebook.presto.spi.ConnectorPageSource;
 
-import static com.facebook.swift.service.guice.ThriftServiceExporter.thriftServerBinder;
-
-public class ThriftTpchServerModule
-        implements Module
+public interface TableFunctionImplementation
 {
-    @Override
-    public void configure(Binder binder)
-    {
-        binder.bind(ThriftIndexedTpchService.class).in(Scopes.SINGLETON);
-        thriftServerBinder(binder).exportThriftService(ThriftIndexedTpchService.class);
-    }
+    ConnectorPageSource create(ConnectorPageSource input);
 }

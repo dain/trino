@@ -17,8 +17,10 @@ import com.facebook.swift.codec.guice.ThriftCodecModule;
 import com.facebook.swift.service.guice.ThriftClientModule;
 import com.facebook.swift.service.guice.ThriftServerModule;
 import com.facebook.swift.service.guice.ThriftServerStatsModule;
+import com.facebook.swift.service.guice.ThriftServiceExporter;
 import com.google.common.collect.ImmutableList;
 import com.google.inject.Module;
+import com.google.inject.Scopes;
 import io.airlift.bootstrap.Bootstrap;
 import io.airlift.log.Logger;
 
@@ -41,7 +43,10 @@ public final class ThriftTpchServer
                         .add(new ThriftClientModule())
                         .add(new ThriftServerModule())
                         .add(new ThriftServerStatsModule())
-                        .add(new ThriftTpchServerModule())
+                        .add(binder -> {
+                            binder.bind(ThriftIndexedTpchService.class).in(Scopes.SINGLETON);
+                            ThriftServiceExporter.thriftServerBinder(binder).exportThriftService(ThriftIndexedTpchService.class);
+                        })
                         .addAll(requireNonNull(extraModules, "extraModules is null"))
                         .build());
         app.strictConfig().initialize();

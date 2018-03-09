@@ -17,12 +17,14 @@ import com.facebook.presto.spi.block.BlockEncodingFactory;
 import com.facebook.presto.spi.block.BlockEncodingSerde;
 import com.facebook.presto.spi.connector.ConnectorFactory;
 import com.facebook.presto.spi.eventlistener.EventListenerFactory;
+import com.facebook.presto.spi.function.PolymorphicTableFunction;
 import com.facebook.presto.spi.resourceGroups.ResourceGroupConfigurationManagerFactory;
 import com.facebook.presto.spi.security.PasswordAuthenticatorFactory;
 import com.facebook.presto.spi.security.SystemAccessControlFactory;
 import com.facebook.presto.spi.session.SessionPropertyConfigurationManagerFactory;
 import com.facebook.presto.spi.type.ParametricType;
 import com.facebook.presto.spi.type.Type;
+import com.facebook.presto.spi.type.TypeManager;
 
 import java.util.Set;
 
@@ -52,6 +54,11 @@ public interface Plugin
     }
 
     default Set<Class<?>> getFunctions()
+    {
+        return emptySet();
+    }
+
+    default Set<PolymorphicTableFunction> getPolymorphicTableFunctionFactories(TypeManager typeManager)
     {
         return emptySet();
     }

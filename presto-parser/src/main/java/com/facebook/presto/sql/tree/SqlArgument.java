@@ -22,33 +22,33 @@ import java.util.Optional;
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static java.util.Objects.requireNonNull;
 
-public final class CallArgument
+public final class SqlArgument
         extends Node
 {
     private final Optional<String> name;
-    private final Expression value;
+    private final Node value;
 
-    public CallArgument(Expression value)
+    public SqlArgument(Node value)
     {
         this(Optional.empty(), Optional.empty(), value);
     }
 
-    public CallArgument(NodeLocation location, Expression value)
+    public SqlArgument(NodeLocation location, Node value)
     {
         this(Optional.of(location), Optional.empty(), value);
     }
 
-    public CallArgument(String name, Expression value)
+    public SqlArgument(String name, Node value)
     {
         this(Optional.empty(), Optional.of(name), value);
     }
 
-    public CallArgument(NodeLocation location, String name, Expression value)
+    public SqlArgument(NodeLocation location, String name, Node value)
     {
         this(Optional.of(location), Optional.of(name), value);
     }
 
-    public CallArgument(Optional<NodeLocation> location, Optional<String> name, Expression value)
+    public SqlArgument(Optional<NodeLocation> location, Optional<String> name, Node value)
     {
         super(location);
         this.name = requireNonNull(name, "name is null");
@@ -60,7 +60,7 @@ public final class CallArgument
         return name;
     }
 
-    public Expression getValue()
+    public Node getValue()
     {
         return value;
     }
@@ -68,7 +68,7 @@ public final class CallArgument
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context)
     {
-        return visitor.visitCallArgument(this, context);
+        return visitor.visitSqlArgument(this, context);
     }
 
     @Override
@@ -86,7 +86,7 @@ public final class CallArgument
         if ((obj == null) || (getClass() != obj.getClass())) {
             return false;
         }
-        CallArgument o = (CallArgument) obj;
+        SqlArgument o = (SqlArgument) obj;
         return Objects.equals(name, o.name) &&
                 Objects.equals(value, o.value);
     }

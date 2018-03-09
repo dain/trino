@@ -25,7 +25,6 @@ import com.facebook.presto.sql.tree.BinaryLiteral;
 import com.facebook.presto.sql.tree.BindExpression;
 import com.facebook.presto.sql.tree.BooleanLiteral;
 import com.facebook.presto.sql.tree.Call;
-import com.facebook.presto.sql.tree.CallArgument;
 import com.facebook.presto.sql.tree.Cast;
 import com.facebook.presto.sql.tree.CharLiteral;
 import com.facebook.presto.sql.tree.CoalesceExpression;
@@ -45,6 +44,8 @@ import com.facebook.presto.sql.tree.Delete;
 import com.facebook.presto.sql.tree.DereferenceExpression;
 import com.facebook.presto.sql.tree.DescribeInput;
 import com.facebook.presto.sql.tree.DescribeOutput;
+import com.facebook.presto.sql.tree.Descriptor;
+import com.facebook.presto.sql.tree.DescriptorColumn;
 import com.facebook.presto.sql.tree.DoubleLiteral;
 import com.facebook.presto.sql.tree.DropColumn;
 import com.facebook.presto.sql.tree.DropSchema;
@@ -111,6 +112,7 @@ import com.facebook.presto.sql.tree.ResetSession;
 import com.facebook.presto.sql.tree.Revoke;
 import com.facebook.presto.sql.tree.Rollback;
 import com.facebook.presto.sql.tree.Rollup;
+import com.facebook.presto.sql.tree.RoutineInvocation;
 import com.facebook.presto.sql.tree.Row;
 import com.facebook.presto.sql.tree.SampledRelation;
 import com.facebook.presto.sql.tree.SearchedCaseExpression;
@@ -131,13 +133,16 @@ import com.facebook.presto.sql.tree.SimpleCaseExpression;
 import com.facebook.presto.sql.tree.SimpleGroupBy;
 import com.facebook.presto.sql.tree.SingleColumn;
 import com.facebook.presto.sql.tree.SortItem;
+import com.facebook.presto.sql.tree.SqlArgument;
 import com.facebook.presto.sql.tree.StartTransaction;
 import com.facebook.presto.sql.tree.Statement;
 import com.facebook.presto.sql.tree.StringLiteral;
 import com.facebook.presto.sql.tree.SubqueryExpression;
 import com.facebook.presto.sql.tree.SubscriptExpression;
 import com.facebook.presto.sql.tree.Table;
+import com.facebook.presto.sql.tree.TableArgument;
 import com.facebook.presto.sql.tree.TableElement;
+import com.facebook.presto.sql.tree.TableFunction;
 import com.facebook.presto.sql.tree.TableSubquery;
 import com.facebook.presto.sql.tree.TimeLiteral;
 import com.facebook.presto.sql.tree.TimestampLiteral;
@@ -427,7 +432,7 @@ class AstBuilder
         return new Call(
                 getLocation(context),
                 getQualifiedName(context.qualifiedName()),
-                visit(context.callArgument(), CallArgument.class));
+                visit(context.sqlArgument(), SqlArgument.class));
     }
 
     @Override
@@ -1631,13 +1636,78 @@ class AstBuilder
     @Override
     public Node visitPositionalArgument(SqlBaseParser.PositionalArgumentContext context)
     {
-        return new CallArgument(getLocation(context), (Expression) visit(context.expression()));
+        return new SqlArgument(getLocation(context), visit(context.sqlArgumentValue()));
     }
 
     @Override
     public Node visitNamedArgument(SqlBaseParser.NamedArgumentContext context)
     {
-        return new CallArgument(getLocation(context), context.identifier().getText(), (Expression) visit(context.expression()));
+        return new SqlArgument(
+                getLocation(context), context.identifier().getText(),
+                visit(context.sqlArgumentValue()));
+    }
+
+    // ***************** polymorphic table functions ***********
+
+    @Override
+    public Node visitTableFunction(SqlBaseParser.TableFunctionContext context)
+    {
+        return new TableFunction(getLocation(context), (RoutineInvocation) visit(context.routineInvocation()));
+    }
+
+    @Override
+    public Node visitRoutineInvocation(SqlBaseParser.RoutineInvocationContext context)
+    {
+        List<SqlArgument> arguments = visit(context.sqlArgument(), SqlArgument.class);
+        return new RoutineInvocation(
+                getLocation(context),
+                getQualifiedName(context.qualifiedName()),
+                arguments);
+    }
+
+    @Override
+    public Node visitDescriptorArgument(SqlBaseParser.DescriptorArgumentContext context)
+    {
+        return new Descriptor(getLocation(context), visit(context.descriptorColumn(), DescriptorColumn.class));
+    }
+
+    @Override
+    public Node visitDescriptorColumn(SqlBaseParser.DescriptorColumnContext context)
+    {
+        Optional<String> type = Optional.empty();
+        if (context.type() != null) {
+            type = Optional.of(getType(context.type()));
+        }
+        return new DescriptorColumn(getLocation(context), (Identifier) visit(context.identifier()), type);
+    }
+
+    @Override
+    public Node visitTableArgument(SqlBaseParser.TableArgumentContext context)
+    {
+        Node target = visit(context.tableArgumentTarget());
+
+        if (!context.identifier().isEmpty() || context.PARTITION() != null || context.EMPTY() != null || context.ORDER() != null) {
+            throw new UnsupportedOperationException("not yet implemented");
+        }
+
+        return new TableArgument(getLocation(context), target);
+    }
+
+    @Override
+    public Node visitTableArgumentTarget(SqlBaseParser.TableArgumentTargetContext context)
+    {
+        // TODO: should be separate methods by using alternative labels in the grammar
+        if (context.qualifiedName() != null) {
+            // named query or table
+        }
+        else if (context.query() != null) {
+            return new TableSubquery(getLocation(context), (Query) visit(context.query()));
+        }
+        else if (context.routineInvocation() != null) {
+            return visit(context.routineInvocation());
+        }
+
+        throw new UnsupportedOperationException("not yet implemented");
     }
 
     // ***************** helpers *****************

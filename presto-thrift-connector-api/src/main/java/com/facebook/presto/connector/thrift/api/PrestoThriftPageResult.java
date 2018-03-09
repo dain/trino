@@ -78,6 +78,12 @@ public final class PrestoThriftPageResult
     @Nullable
     public Page toPage(List<Type> columnTypes)
     {
+        return createPage(columnTypes, columnBlocks, rowCount);
+    }
+
+    @Nullable
+    static Page createPage(List<Type> columnTypes, List<PrestoThriftBlock> columnBlocks, int rowCount)
+    {
         if (rowCount == 0) {
             return null;
         }
@@ -140,7 +146,7 @@ public final class PrestoThriftPageResult
         return new PrestoThriftPageResult(thriftBlocks, positions, null);
     }
 
-    private static void checkAllColumnsAreOfExpectedSize(List<PrestoThriftBlock> columnBlocks, int expectedNumberOfRows)
+    static void checkAllColumnsAreOfExpectedSize(List<PrestoThriftBlock> columnBlocks, int expectedNumberOfRows)
     {
         for (int i = 0; i < columnBlocks.size(); i++) {
             checkArgument(columnBlocks.get(i).numberOfRecords() == expectedNumberOfRows,

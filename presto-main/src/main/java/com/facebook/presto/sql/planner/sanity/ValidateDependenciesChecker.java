@@ -50,6 +50,7 @@ import com.facebook.presto.sql.planner.plan.SemiJoinNode;
 import com.facebook.presto.sql.planner.plan.SetOperationNode;
 import com.facebook.presto.sql.planner.plan.SortNode;
 import com.facebook.presto.sql.planner.plan.TableFinishNode;
+import com.facebook.presto.sql.planner.plan.TableFunctionCall;
 import com.facebook.presto.sql.planner.plan.TableScanNode;
 import com.facebook.presto.sql.planner.plan.TableWriterNode;
 import com.facebook.presto.sql.planner.plan.TopNNode;
@@ -97,6 +98,18 @@ public final class ValidateDependenciesChecker
         protected Void visitPlan(PlanNode node, Set<Symbol> boundSymbols)
         {
             throw new UnsupportedOperationException("not yet implemented: " + node.getClass().getName());
+        }
+
+        @Override
+        public Void visitTableFunctionCall(TableFunctionCall node, Set<Symbol> boundSymbols)
+        {
+            PlanNode input = node.getInput();
+            input.accept(this, boundSymbols); // visit child
+
+            Set<Symbol> inputs = createInputs(input, boundSymbols);
+            checkDependencies(inputs, node.getInputFields(), "Invalid node. Expression dependencies (%s) not in source plan output (%s)", node.getInputFields(), inputs);
+
+            return null;
         }
 
         @Override

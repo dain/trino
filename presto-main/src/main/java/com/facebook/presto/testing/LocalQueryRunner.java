@@ -203,7 +203,6 @@ import static com.facebook.presto.spi.connector.ConnectorSplitManager.SplitSched
 import static com.facebook.presto.spi.connector.NotPartitionedPartitionHandle.NOT_PARTITIONED;
 import static com.facebook.presto.spi.type.BigintType.BIGINT;
 import static com.facebook.presto.sql.ParsingUtil.createParsingOptions;
-import static com.facebook.presto.sql.testing.TreeAssertions.assertFormattedSql;
 import static com.facebook.presto.testing.TestingSession.TESTING_CATALOG;
 import static com.facebook.presto.testing.TestingSession.createBogusTestingCatalog;
 import static com.facebook.presto.transaction.TransactionBuilder.transaction;
@@ -778,7 +777,7 @@ public class LocalQueryRunner
     {
         Statement statement = unwrapExecuteStatement(sqlParser.createStatement(sql, createParsingOptions(session)), sqlParser, session);
 
-        assertFormattedSql(sqlParser, createParsingOptions(session), statement);
+//        assertFormattedSql(sqlParser, createParsingOptions(session), statement);
 
         return createPlan(session, sql, getPlanOptimizers(forceSingleNode), stage);
     }
@@ -816,7 +815,7 @@ public class LocalQueryRunner
         }
         validateParameters(statement, parameters);
 
-        assertFormattedSql(sqlParser, createParsingOptions(session), statement);
+//        assertFormattedSql(sqlParser, createParsingOptions(session), statement);
 
         PlanNodeIdAllocator idAllocator = new PlanNodeIdAllocator();
 

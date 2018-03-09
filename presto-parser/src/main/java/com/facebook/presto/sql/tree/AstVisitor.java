@@ -497,7 +497,7 @@ public abstract class AstVisitor<R, C>
         return visitNode(node, context);
     }
 
-    protected R visitCallArgument(CallArgument node, C context)
+    protected R visitSqlArgument(SqlArgument node, C context)
     {
         return visitNode(node, context);
     }
@@ -700,5 +700,30 @@ public abstract class AstVisitor<R, C>
     protected R visitGroupingOperation(GroupingOperation node, C context)
     {
         return visitExpression(node, context);
+    }
+
+    protected R visitRoutineInvocation(RoutineInvocation node, C context)
+    {
+        return visitNode(node, context);
+    }
+
+    protected R visitTableFunction(TableFunction node, C context)
+    {
+        return visitNode(node, context);
+    }
+
+    protected R visitDescriptor(Descriptor node, C context)
+    {
+        return visitNode(node, context);
+    }
+
+    protected R visitDescriptorColumn(DescriptorColumn node, C context)
+    {
+        return visitNode(node, context);
+    }
+
+    protected R visitTableArgument(TableArgument node, C context)
+    {
+        return visitNode(node, context);
     }
 }

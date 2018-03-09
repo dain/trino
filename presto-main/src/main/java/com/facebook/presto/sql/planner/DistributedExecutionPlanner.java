@@ -43,6 +43,7 @@ import com.facebook.presto.sql.planner.plan.SampleNode;
 import com.facebook.presto.sql.planner.plan.SemiJoinNode;
 import com.facebook.presto.sql.planner.plan.SortNode;
 import com.facebook.presto.sql.planner.plan.TableFinishNode;
+import com.facebook.presto.sql.planner.plan.TableFunctionCall;
 import com.facebook.presto.sql.planner.plan.TableScanNode;
 import com.facebook.presto.sql.planner.plan.TableWriterNode;
 import com.facebook.presto.sql.planner.plan.TopNNode;
@@ -131,6 +132,12 @@ public class DistributedExecutionPlanner
             this.session = session;
             this.pipelineExecutionStrategy = pipelineExecutionStrategy;
             this.splitSources = allSplitSources;
+        }
+
+        @Override
+        public Map<PlanNodeId, SplitSource> visitTableFunctionCall(TableFunctionCall node, Void context)
+        {
+            return node.getInput().accept(this, context);
         }
 
         @Override

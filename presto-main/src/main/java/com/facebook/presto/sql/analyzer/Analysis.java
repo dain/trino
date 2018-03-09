@@ -33,6 +33,7 @@ import com.facebook.presto.sql.tree.QuantifiedComparisonExpression;
 import com.facebook.presto.sql.tree.Query;
 import com.facebook.presto.sql.tree.QuerySpecification;
 import com.facebook.presto.sql.tree.Relation;
+import com.facebook.presto.sql.tree.RoutineInvocation;
 import com.facebook.presto.sql.tree.SampledRelation;
 import com.facebook.presto.sql.tree.Statement;
 import com.facebook.presto.sql.tree.SubqueryExpression;
@@ -87,6 +88,7 @@ public class Analysis
     private final Map<NodeRef<Node>, List<Expression>> outputExpressions = new LinkedHashMap<>();
     private final Map<NodeRef<QuerySpecification>, List<FunctionCall>> windowFunctions = new LinkedHashMap<>();
     private final Map<NodeRef<OrderBy>, List<FunctionCall>> orderByWindowFunctions = new LinkedHashMap<>();
+    private final Map<NodeRef<RoutineInvocation>, TableFunctionAnalysis> tableFunctions = new LinkedHashMap<>();
 
     private final Map<NodeRef<Join>, Expression> joins = new LinkedHashMap<>();
     private final Map<NodeRef<Join>, JoinUsingAnalysis> joinUsing = new LinkedHashMap<>();
@@ -601,6 +603,61 @@ public class Analysis
     public JoinUsingAnalysis getJoinUsing(Join node)
     {
         return joinUsing.get(NodeRef.of(node));
+    }
+
+    public void recordTableFunction(RoutineInvocation call, TableFunctionAnalysis analysis)
+    {
+        tableFunctions.put(NodeRef.of(call), analysis);
+    }
+
+    public TableFunctionAnalysis getTableFunction(RoutineInvocation call)
+    {
+        return tableFunctions.get(NodeRef.of(call));
+    }
+
+    public static final class TableFunctionAnalysis
+    {
+        private final RelationType inputType;
+        private final Node input;
+
+        private final byte[] handle;
+        private final boolean singleNode;
+
+        private final RelationType outputType;
+
+        public TableFunctionAnalysis(byte[] handle, boolean singleNode, RelationType inputType, Node input, RelationType outputType)
+        {
+            this.handle = handle;
+            this.singleNode = singleNode;
+            this.inputType = inputType;
+            this.outputType = outputType;
+            this.input = input;
+        }
+
+        public byte[] getHandle()
+        {
+            return handle;
+        }
+
+        public boolean isSingleNode()
+        {
+            return singleNode;
+        }
+
+        public RelationType getInputType()
+        {
+            return inputType;
+        }
+
+        public RelationType getOutputType()
+        {
+            return outputType;
+        }
+
+        public Node getInput()
+        {
+            return input;
+        }
     }
 
     @Immutable

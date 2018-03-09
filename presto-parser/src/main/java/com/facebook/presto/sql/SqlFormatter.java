@@ -18,7 +18,6 @@ import com.facebook.presto.sql.tree.AliasedRelation;
 import com.facebook.presto.sql.tree.AllColumns;
 import com.facebook.presto.sql.tree.AstVisitor;
 import com.facebook.presto.sql.tree.Call;
-import com.facebook.presto.sql.tree.CallArgument;
 import com.facebook.presto.sql.tree.ColumnDefinition;
 import com.facebook.presto.sql.tree.Commit;
 import com.facebook.presto.sql.tree.CreateSchema;
@@ -29,6 +28,8 @@ import com.facebook.presto.sql.tree.Deallocate;
 import com.facebook.presto.sql.tree.Delete;
 import com.facebook.presto.sql.tree.DescribeInput;
 import com.facebook.presto.sql.tree.DescribeOutput;
+import com.facebook.presto.sql.tree.Descriptor;
+import com.facebook.presto.sql.tree.DescriptorColumn;
 import com.facebook.presto.sql.tree.DropColumn;
 import com.facebook.presto.sql.tree.DropSchema;
 import com.facebook.presto.sql.tree.DropTable;
@@ -66,6 +67,7 @@ import com.facebook.presto.sql.tree.RenameTable;
 import com.facebook.presto.sql.tree.ResetSession;
 import com.facebook.presto.sql.tree.Revoke;
 import com.facebook.presto.sql.tree.Rollback;
+import com.facebook.presto.sql.tree.RoutineInvocation;
 import com.facebook.presto.sql.tree.Row;
 import com.facebook.presto.sql.tree.SampledRelation;
 import com.facebook.presto.sql.tree.Select;
@@ -82,8 +84,11 @@ import com.facebook.presto.sql.tree.ShowSession;
 import com.facebook.presto.sql.tree.ShowStats;
 import com.facebook.presto.sql.tree.ShowTables;
 import com.facebook.presto.sql.tree.SingleColumn;
+import com.facebook.presto.sql.tree.SqlArgument;
 import com.facebook.presto.sql.tree.StartTransaction;
 import com.facebook.presto.sql.tree.Table;
+import com.facebook.presto.sql.tree.TableArgument;
+import com.facebook.presto.sql.tree.TableFunction;
 import com.facebook.presto.sql.tree.TableSubquery;
 import com.facebook.presto.sql.tree.TransactionAccessMode;
 import com.facebook.presto.sql.tree.TransactionMode;
@@ -163,6 +168,72 @@ public final class SqlFormatter
             if (node.isWithOrdinality()) {
                 builder.append(" WITH ORDINALITY");
             }
+            return null;
+        }
+
+        @Override
+        protected Void visitTableFunction(TableFunction node, Integer indent)
+        {
+            builder.append("TABLE (");
+            process(node.getCall(), indent);
+            builder.append(")");
+            return null;
+        }
+
+        @Override
+        protected Void visitRoutineInvocation(RoutineInvocation node, Integer indent)
+        {
+            builder.append(node.getName())
+                    .append("(");
+
+            Iterator<SqlArgument> arguments = node.getArguments().iterator();
+            while (arguments.hasNext()) {
+                process(arguments.next(), indent);
+                if (arguments.hasNext()) {
+                    builder.append(", ");
+                }
+            }
+
+            builder.append(")");
+
+            return null;
+        }
+
+        @Override
+        protected Void visitDescriptor(Descriptor node, Integer indent)
+        {
+            builder.append("DESCRIPTOR (");
+
+            Iterator<DescriptorColumn> arguments = node.getColumns().iterator();
+            while (arguments.hasNext()) {
+                process(arguments.next(), indent);
+                if (arguments.hasNext()) {
+                    builder.append(", ");
+                }
+            }
+
+            builder.append(")");
+
+            return null;
+        }
+
+        @Override
+        protected Void visitDescriptorColumn(DescriptorColumn node, Integer context)
+        {
+            builder.append(node.getName());
+
+            if (node.getType().isPresent()) {
+                builder.append(" ")
+                        .append(node.getType().get());
+            }
+
+            return null;
+        }
+
+        @Override
+        public Void visitTableArgument(TableArgument node, Integer indent)
+        {
+            process(node.getTable(), indent);
             return null;
         }
 
@@ -281,7 +352,9 @@ public final class SqlFormatter
             }
 
             if (node.getGroupBy().isPresent()) {
-                append(indent, "GROUP BY " + (node.getGroupBy().get().isDistinct() ? " DISTINCT " : "") + formatGroupBy(node.getGroupBy().get().getGroupingElements())).append('\n');
+                append(
+                        indent,
+                        "GROUP BY " + (node.getGroupBy().get().isDistinct() ? " DISTINCT " : "") + formatGroupBy(node.getGroupBy().get().getGroupingElements())).append('\n');
             }
 
             if (node.getHaving().isPresent()) {
@@ -461,7 +534,7 @@ public final class SqlFormatter
         @Override
         protected Void visitTableSubquery(TableSubquery node, Integer indent)
         {
-            builder.append('(')
+            builder.append("TABLE (")
                     .append('\n');
 
             process(node.getQuery(), indent + 1);
@@ -962,13 +1035,13 @@ public final class SqlFormatter
         }
 
         @Override
-        protected Void visitCallArgument(CallArgument node, Integer indent)
+        protected Void visitSqlArgument(SqlArgument node, Integer indent)
         {
             if (node.getName().isPresent()) {
                 builder.append(node.getName().get())
                         .append(" => ");
             }
-            builder.append(formatExpression(node.getValue(), parameters));
+            process(node.getValue(), indent);
 
             return null;
         }
@@ -980,7 +1053,7 @@ public final class SqlFormatter
                     .append(node.getName())
                     .append("(");
 
-            Iterator<CallArgument> arguments = node.getArguments().iterator();
+            Iterator<SqlArgument> arguments = node.getArguments().iterator();
             while (arguments.hasNext()) {
                 process(arguments.next(), indent);
                 if (arguments.hasNext()) {

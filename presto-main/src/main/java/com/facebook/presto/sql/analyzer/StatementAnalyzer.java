@@ -29,7 +29,9 @@ import com.facebook.presto.spi.CatalogSchemaName;
 import com.facebook.presto.spi.ColumnHandle;
 import com.facebook.presto.spi.ColumnMetadata;
 import com.facebook.presto.spi.PrestoException;
+import com.facebook.presto.spi.TableFunction;
 import com.facebook.presto.spi.function.OperatorType;
+import com.facebook.presto.spi.function.PolymorphicTableFunction;
 import com.facebook.presto.spi.security.Identity;
 import com.facebook.presto.spi.type.ArrayType;
 import com.facebook.presto.spi.type.MapType;
@@ -56,6 +58,7 @@ import com.facebook.presto.sql.tree.Deallocate;
 import com.facebook.presto.sql.tree.DefaultTraversalVisitor;
 import com.facebook.presto.sql.tree.Delete;
 import com.facebook.presto.sql.tree.DereferenceExpression;
+import com.facebook.presto.sql.tree.Descriptor;
 import com.facebook.presto.sql.tree.DropColumn;
 import com.facebook.presto.sql.tree.DropSchema;
 import com.facebook.presto.sql.tree.DropTable;
@@ -98,6 +101,7 @@ import com.facebook.presto.sql.tree.RenameTable;
 import com.facebook.presto.sql.tree.ResetSession;
 import com.facebook.presto.sql.tree.Revoke;
 import com.facebook.presto.sql.tree.Rollback;
+import com.facebook.presto.sql.tree.RoutineInvocation;
 import com.facebook.presto.sql.tree.Row;
 import com.facebook.presto.sql.tree.SampledRelation;
 import com.facebook.presto.sql.tree.Select;
@@ -106,9 +110,11 @@ import com.facebook.presto.sql.tree.SetOperation;
 import com.facebook.presto.sql.tree.SetSession;
 import com.facebook.presto.sql.tree.SingleColumn;
 import com.facebook.presto.sql.tree.SortItem;
+import com.facebook.presto.sql.tree.SqlArgument;
 import com.facebook.presto.sql.tree.StartTransaction;
 import com.facebook.presto.sql.tree.Statement;
 import com.facebook.presto.sql.tree.Table;
+import com.facebook.presto.sql.tree.TableArgument;
 import com.facebook.presto.sql.tree.TableSubquery;
 import com.facebook.presto.sql.tree.Unnest;
 import com.facebook.presto.sql.tree.Use;
@@ -129,12 +135,15 @@ import com.google.common.collect.Multimap;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.facebook.presto.SystemSessionProperties.LEGACY_ORDER_BY;
@@ -142,6 +151,8 @@ import static com.facebook.presto.metadata.FunctionKind.AGGREGATE;
 import static com.facebook.presto.metadata.FunctionKind.WINDOW;
 import static com.facebook.presto.metadata.MetadataUtil.createQualifiedObjectName;
 import static com.facebook.presto.spi.StandardErrorCode.INVALID_FUNCTION_ARGUMENT;
+import static com.facebook.presto.spi.function.PolymorphicTableFunction.ExtendedType.DESCRIPTOR;
+import static com.facebook.presto.spi.function.PolymorphicTableFunction.ExtendedType.TABLE;
 import static com.facebook.presto.spi.type.BigintType.BIGINT;
 import static com.facebook.presto.spi.type.BooleanType.BOOLEAN;
 import static com.facebook.presto.spi.type.VarcharType.VARCHAR;
@@ -722,6 +733,103 @@ class StatementAnalyzer
             StatementAnalyzer analyzer = new StatementAnalyzer(analysis, metadata, sqlParser, accessControl, session);
             Scope queryScope = analyzer.analyze(node.getQuery(), scope);
             return createAndAssignScope(node, scope, queryScope.getRelationType());
+        }
+
+        @Override
+        protected Scope visitTableFunction(com.facebook.presto.sql.tree.TableFunction node, Optional<Scope> scope)
+        {
+            RoutineInvocation call = node.getCall();
+
+            if (!call.getArguments().stream()
+                    .map(SqlArgument::getName)
+                    .allMatch(Optional::isPresent)) {
+                throw new SemanticException(SemanticErrorCode.NOT_SUPPORTED, call, "Positional arguments not yet supported");
+            }
+
+            PolymorphicTableFunction function = metadata.getFunctionRegistry().getTableFunction(call.getName());
+
+            if (function == null) {
+                throw new SemanticException(SemanticErrorCode.FUNCTION_NOT_FOUND, call, "Function not found: %s", call.getName());
+            }
+
+            Map<String, PolymorphicTableFunction.Parameter> parametersByName = function.getParameters().stream()
+                    .collect(Collectors.toMap(PolymorphicTableFunction.Parameter::getName, Function.identity()));
+
+            Node input = null;
+            RelationType inputType = null;
+
+            Map<String, Object> arguments = new HashMap<>();
+
+            for (SqlArgument argument : call.getArguments()) {
+                String name = argument.getName().get();
+                Node value = argument.getValue();
+
+                PolymorphicTableFunction.Parameter parameter = parametersByName.get(name.toLowerCase(Locale.ENGLISH));
+                if (parameter == null) {
+                    throw new SemanticException(SemanticErrorCode.INVALID_PROCEDURE_ARGUMENTS, argument, "Function '%s' does not take argument '%s'", call.getName(), name);
+                }
+
+                Object parameterType = parameter.getType();
+
+                if (parameterType.equals(TABLE)) {
+                    if (!(value instanceof TableArgument)) {
+                        throw new SemanticException(SemanticErrorCode.INVALID_PROCEDURE_ARGUMENTS, argument, "Argument '%s' must be a table", name);
+                    }
+
+                    input = ((TableArgument) value).getTable();
+                    inputType = process(input, scope).getRelationType();
+
+                    RowType type = RowType.from(inputType.getAllFields().stream()
+                            .map(field -> new RowType.Field(field.getName(), field.getType()))
+                            .collect(Collectors.toList()));
+
+                    arguments.put(name, type);
+                }
+                else if (parameterType.equals(DESCRIPTOR)) {
+                    if (!(value instanceof Descriptor)) {
+                        throw new SemanticException(SemanticErrorCode.INVALID_PROCEDURE_ARGUMENTS, argument, "Argument '%s' must be a descriptor", name);
+                    }
+
+                    List<PolymorphicTableFunction.ColumnDescriptor> descriptor = ((Descriptor) value).getColumns().stream()
+                            .map(column -> new PolymorphicTableFunction.ColumnDescriptor(column.getName().toString(), column.getType().map(TypeSignature::parseTypeSignature)))
+                            .collect(Collectors.toList());
+
+                    arguments.put(name, descriptor);
+                }
+                else if (parameterType instanceof TypeSignature) { // a scalar expression
+                    TypeSignature type = (TypeSignature) parameterType;
+                    Type expectedType = metadata.getType(type);
+
+                    if (!(value instanceof Expression)) {
+                        throw new SemanticException(SemanticErrorCode.INVALID_PROCEDURE_ARGUMENTS, argument, "Argument '%s' must be an expression", name);
+                    }
+
+                    Expression expression = (Expression) value;
+                    analyzeExpression(expression, scope.get());
+                    Type actualType = analysis.getType(expression);
+
+                    if (!metadata.getTypeManager().canCoerce(actualType, expectedType)) {
+                        throw new SemanticException(SemanticErrorCode.TYPE_MISMATCH, argument, "Expected type '%s' for argument '%s'", type, name);
+                    }
+
+                    Object constant = ExpressionInterpreter.evaluateConstantExpression((Expression) value, expectedType, metadata, session, analysis.getParameters());
+                    arguments.put(name, constant);
+                }
+                else {
+                    throw new IllegalStateException("Unexpected parameter type: " + parameterType);
+                }
+            }
+
+            TableFunction resolved = function.specialize(arguments);
+            RowType outputType = resolved.getOutputType();
+
+            RelationType relationType = new RelationType(outputType.getFields().stream()
+                    .map(field -> Field.newUnqualified(field.getName(), field.getType()))
+                    .collect(Collectors.toList()));
+
+            analysis.recordTableFunction(call, new Analysis.TableFunctionAnalysis(resolved.getHandle(), resolved.isSingleNode(), inputType, input, relationType));
+
+            return createAndAssignScope(node, scope, relationType);
         }
 
         @Override

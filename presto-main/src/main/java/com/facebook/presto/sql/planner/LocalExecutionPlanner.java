@@ -64,6 +64,7 @@ import com.facebook.presto.operator.SetBuilderOperator.SetSupplier;
 import com.facebook.presto.operator.SourceOperatorFactory;
 import com.facebook.presto.operator.SpatialIndexBuilderOperator.SpatialIndexBuilderOperatorFactory;
 import com.facebook.presto.operator.SpatialJoinOperator.SpatialJoinOperatorFactory;
+import com.facebook.presto.operator.TableFunctionOperator.TableFunctionOperatorFactory;
 import com.facebook.presto.operator.TableScanOperator.TableScanOperatorFactory;
 import com.facebook.presto.operator.TaskContext;
 import com.facebook.presto.operator.TaskOutputOperator.TaskOutputFactory;
@@ -95,6 +96,8 @@ import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.RecordSet;
 import com.facebook.presto.spi.block.BlockEncodingSerde;
 import com.facebook.presto.spi.block.SortOrder;
+import com.facebook.presto.spi.function.PolymorphicTableFunction;
+import com.facebook.presto.spi.function.TableFunctionImplementation;
 import com.facebook.presto.spi.predicate.NullableValue;
 import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.spiller.PartitioningSpillerFactory;
@@ -139,6 +142,7 @@ import com.facebook.presto.sql.planner.plan.SampleNode;
 import com.facebook.presto.sql.planner.plan.SemiJoinNode;
 import com.facebook.presto.sql.planner.plan.SortNode;
 import com.facebook.presto.sql.planner.plan.TableFinishNode;
+import com.facebook.presto.sql.planner.plan.TableFunctionCall;
 import com.facebook.presto.sql.planner.plan.TableScanNode;
 import com.facebook.presto.sql.planner.plan.TableWriterNode;
 import com.facebook.presto.sql.planner.plan.TableWriterNode.DeleteHandle;
@@ -156,6 +160,7 @@ import com.facebook.presto.sql.tree.FieldReference;
 import com.facebook.presto.sql.tree.FunctionCall;
 import com.facebook.presto.sql.tree.NodeRef;
 import com.facebook.presto.sql.tree.OrderBy;
+import com.facebook.presto.sql.tree.QualifiedName;
 import com.facebook.presto.sql.tree.SortItem;
 import com.facebook.presto.sql.tree.SymbolReference;
 import com.google.common.base.VerifyException;
@@ -210,6 +215,7 @@ import static com.facebook.presto.operator.TableWriterOperator.TableWriterOperat
 import static com.facebook.presto.operator.UnnestOperator.UnnestOperatorFactory;
 import static com.facebook.presto.operator.WindowFunctionDefinition.window;
 import static com.facebook.presto.spi.StandardErrorCode.COMPILER_ERROR;
+import static com.facebook.presto.spi.StandardErrorCode.FUNCTION_NOT_FOUND;
 import static com.facebook.presto.spi.type.BigintType.BIGINT;
 import static com.facebook.presto.spi.type.TypeUtils.writeNativeValue;
 import static com.facebook.presto.sql.analyzer.ExpressionAnalyzer.getExpressionTypes;
@@ -644,6 +650,39 @@ public class LocalExecutionPlanner
         {
             this.session = session;
             this.groupEnumerable = groupEnumerable;
+        }
+
+        @Override
+        public PhysicalOperation visitTableFunctionCall(TableFunctionCall node, LocalExecutionPlanContext context)
+        {
+            PolymorphicTableFunction factory = metadata.getFunctionRegistry().getTableFunction(QualifiedName.of(node.getName()));
+            if (factory == null) {
+                throw new PrestoException(FUNCTION_NOT_FOUND, format("Table function not found: %s", node.getName()));
+            }
+
+            PhysicalOperation input = null;
+            if (node.getInput() != null) {
+                input = node.getInput().accept(this, context);
+            }
+
+            TableFunctionImplementation function = factory.getInstance(node.getHandle());
+
+            List<Type> outputTypes = new ArrayList<>();
+            for (Symbol symbol : node.getOutputSymbols()) {
+                Type type = requireNonNull(context.getTypes().get(symbol), format("No type for symbol %s", symbol));
+                outputTypes.add(type);
+            }
+
+            OperatorFactory operatorFactory = new TableFunctionOperatorFactory(
+                    context.getNextOperatorId(),
+                    node.getId(),
+                    outputTypes,
+                    function);
+
+            if (input == null) {
+                return new PhysicalOperation(operatorFactory, makeLayout(node), UNGROUPED_EXECUTION);
+            }
+            return new PhysicalOperation(operatorFactory, makeLayout(node), input);
         }
 
         @Override

@@ -26,19 +26,19 @@ public final class Call
         extends Statement
 {
     private final QualifiedName name;
-    private final List<CallArgument> arguments;
+    private final List<SqlArgument> arguments;
 
-    public Call(QualifiedName name, List<CallArgument> arguments)
+    public Call(QualifiedName name, List<SqlArgument> arguments)
     {
         this(Optional.empty(), name, arguments);
     }
 
-    public Call(NodeLocation location, QualifiedName name, List<CallArgument> arguments)
+    public Call(NodeLocation location, QualifiedName name, List<SqlArgument> arguments)
     {
         this(Optional.of(location), name, arguments);
     }
 
-    public Call(Optional<NodeLocation> location, QualifiedName name, List<CallArgument> arguments)
+    public Call(Optional<NodeLocation> location, QualifiedName name, List<SqlArgument> arguments)
     {
         super(location);
         this.name = requireNonNull(name, "name is null");
@@ -50,7 +50,7 @@ public final class Call
         return name;
     }
 
-    public List<CallArgument> getArguments()
+    public List<SqlArgument> getArguments()
     {
         return arguments;
     }

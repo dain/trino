@@ -54,7 +54,7 @@ statement
         ADD COLUMN column=columnDefinition                             #addColumn
     | CREATE (OR REPLACE)? VIEW qualifiedName AS query                 #createView
     | DROP VIEW (IF EXISTS)? qualifiedName                             #dropView
-    | CALL qualifiedName '(' (callArgument (',' callArgument)*)? ')'   #call
+    | CALL qualifiedName '(' (sqlArgument (',' sqlArgument)*)? ')'     #call
     | GRANT
         (privilege (',' privilege)* | ALL PRIVILEGES)
         ON TABLE? qualifiedName TO grantee=identifier
@@ -237,6 +237,7 @@ relationPrimary
     | UNNEST '(' expression (',' expression)* ')' (WITH ORDINALITY)?  #unnest
     | LATERAL '(' query ')'                                           #lateral
     | '(' relation ')'                                                #parenthesizedRelation
+    | TABLE '(' routineInvocation ')'                                 #tableFunction
     ;
 
 expression
@@ -292,7 +293,7 @@ primaryExpression
     | ROW '(' expression (',' expression)* ')'                                            #rowConstructor
     | qualifiedName '(' ASTERISK ')' filter? over?                                        #functionCall
     | qualifiedName '(' (setQuantifier? expression (',' expression)*)?
-        (ORDER BY sortItem (',' sortItem)*)? ')' filter? over?                             #functionCall
+        (ORDER BY sortItem (',' sortItem)*)? ')' filter? over?                            #functionCall
     | identifier '->' expression                                                          #lambda
     | '(' (identifier (',' identifier)*)? ')' '->' expression                             #lambda
     | '(' query ')'                                                                       #subqueryExpression
@@ -420,9 +421,53 @@ levelOfIsolation
     | SERIALIZABLE                        #serializable
     ;
 
-callArgument
-    : expression                    #positionalArgument
-    | identifier '=>' expression    #namedArgument
+routineInvocation
+    : qualifiedName '(' (sqlArgument (',' sqlArgument)*)? copartition? ')'
+    ;
+
+sqlArgument
+    : sqlArgumentValue                     #positionalArgument
+    | identifier '=>' sqlArgumentValue     #namedArgument
+    ;
+
+sqlArgumentValue
+    // ambiguity between TABLE (name)/<routine name>(<identifier>), DESCRIPTOR(name), <function>(<identifier>), so order matters
+    : descriptorArgument
+    | tableArgument
+    | expression
+    ;
+
+tableArgument
+    : tableArgumentTarget
+      (AS? identifier columnAliases?)?
+      (PARTITION BY (identifier | '(' (expression (',' expression)*)? ')'))?
+      (PRUNE WHEN EMPTY | KEEP WHEN EMPTY)?
+      (ORDER BY (
+        sortItem
+        | '(' (sortItem (',' sortItem)*)? ')'
+      ))?
+    ;
+
+tableArgumentTarget
+    : TABLE '(' qualifiedName ')'
+    | TABLE '(' query ')'           
+    | routineInvocation
+    ;
+
+descriptorArgument
+    : DESCRIPTOR '(' descriptorColumn (',' descriptorColumn)* ')'
+    ;
+
+descriptorColumn
+    : identifier type?
+    ;
+
+copartition
+    : COPARTITION copartitionItem (',' copartitionItem)*
+    ;
+
+copartitionItem
+    : '(' identifier ',' identifier (',' identifier)* ')'
     ;
 
 privilege
@@ -472,6 +517,7 @@ nonReserved
     | WORK | WRITE
     | YEAR
     | ZONE
+    | PRUNE | KEEP | EMPTY | COPARTITION | DESCRIPTOR
     ;
 
 ADD: 'ADD';
@@ -499,6 +545,7 @@ COMMENT: 'COMMENT';
 COMMIT: 'COMMIT';
 COMMITTED: 'COMMITTED';
 CONSTRAINT: 'CONSTRAINT';
+COPARTITION: 'COPARTITION';
 CREATE: 'CREATE';
 CROSS: 'CROSS';
 CUBE: 'CUBE';
@@ -513,10 +560,12 @@ DEALLOCATE: 'DEALLOCATE';
 DELETE: 'DELETE';
 DESC: 'DESC';
 DESCRIBE: 'DESCRIBE';
+DESCRIPTOR: 'DESCRIPTOR';
 DISTINCT: 'DISTINCT';
 DISTRIBUTED: 'DISTRIBUTED';
 DROP: 'DROP';
 ELSE: 'ELSE';
+EMPTY: 'EMPTY';
 END: 'END';
 ESCAPE: 'ESCAPE';
 EXCEPT: 'EXCEPT';
@@ -554,6 +603,7 @@ INTO: 'INTO';
 IS: 'IS';
 ISOLATION: 'ISOLATION';
 JOIN: 'JOIN';
+KEEP: 'KEEP';
 LAST: 'LAST';
 LATERAL: 'LATERAL';
 LEFT: 'LEFT';
@@ -593,6 +643,7 @@ PRECEDING: 'PRECEDING';
 PREPARE: 'PREPARE';
 PRIVILEGES: 'PRIVILEGES';
 PROPERTIES: 'PROPERTIES';
+PRUNE: 'PRUNE';
 PUBLIC: 'PUBLIC';
 RANGE: 'RANGE';
 READ: 'READ';
