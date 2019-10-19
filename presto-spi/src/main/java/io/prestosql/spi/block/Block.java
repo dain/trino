@@ -15,6 +15,8 @@ package io.prestosql.spi.block;
 
 import io.airlift.slice.Slice;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.function.BiConsumer;
 
 import static io.prestosql.spi.block.BlockUtil.checkArrayRange;
@@ -304,5 +306,13 @@ public interface Block
     default Block getLoadedBlock()
     {
         return this;
+    }
+
+    /**
+     * Gets the child blocks of this block.
+     */
+    default List<Block> getChildren()
+    {
+        return Collections.emptyList();
     }
 }

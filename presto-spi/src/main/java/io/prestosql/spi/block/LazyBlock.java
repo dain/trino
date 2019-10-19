@@ -16,8 +16,10 @@ package io.prestosql.spi.block;
 import io.airlift.slice.Slice;
 import org.openjdk.jol.info.ClassLayout;
 
+import java.util.List;
 import java.util.function.BiConsumer;
 
+import static java.util.Collections.singletonList;
 import static java.util.Objects.requireNonNull;
 
 public class LazyBlock
@@ -246,6 +248,12 @@ public class LazyBlock
     {
         assureLoaded();
         return block.isNull(position);
+    }
+
+    @Override
+    public final List<Block> getChildren()
+    {
+        return singletonList(getBlock());
     }
 
     public Block getBlock()
