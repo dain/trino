@@ -98,7 +98,7 @@ public class DictionaryBlock
             if (dictionary instanceof DictionaryBlock) {
                 throw new IllegalArgumentException("compacted dictionary should not have dictionary base block");
             }
-            this.sizeInBytes = this.retainedSizeInBytes;
+            this.sizeInBytes = dictionary.getSizeInBytes() + (Integer.BYTES * (long) positionCount);
             this.uniqueIds = dictionary.getPositionCount();
         }
     }
