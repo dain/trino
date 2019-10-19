@@ -156,24 +156,36 @@ public class LazyBlock
     @Override
     public long getSizeInBytes()
     {
+        if (!isLoaded()) {
+            return 0;
+        }
         return getBlock().getSizeInBytes();
     }
 
     @Override
     public long getRegionSizeInBytes(int position, int length)
     {
+        if (!isLoaded()) {
+            return 0;
+        }
         return getBlock().getRegionSizeInBytes(position, length);
     }
 
     @Override
     public long getPositionsSizeInBytes(boolean[] positions)
     {
+        if (!isLoaded()) {
+            return 0;
+        }
         return getBlock().getPositionsSizeInBytes(positions);
     }
 
     @Override
     public long getRetainedSizeInBytes()
     {
+        if (!lazyData.isLoaded()) {
+            return INSTANCE_SIZE;
+        }
         return INSTANCE_SIZE + getBlock().getRetainedSizeInBytes();
     }
 
