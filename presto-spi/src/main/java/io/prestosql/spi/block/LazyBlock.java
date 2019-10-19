@@ -16,14 +16,20 @@ package io.prestosql.spi.block;
 import io.airlift.slice.Slice;
 import org.openjdk.jol.info.ClassLayout;
 
+import javax.annotation.Nullable;
+import javax.annotation.concurrent.NotThreadSafe;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 import static io.prestosql.spi.block.BlockUtil.checkArrayRange;
 import static io.prestosql.spi.block.BlockUtil.checkValidRegion;
 import static java.util.Collections.singletonList;
 import static java.util.Objects.requireNonNull;
 
+@NotThreadSafe
 public class LazyBlock
         implements Block
 {
@@ -266,8 +272,15 @@ public class LazyBlock
     @Override
     public Block getLoadedBlock()
     {
-        lazyData.recursiveLoad();
-        return lazyData.getBlock();
+        return lazyData.getFullyLoadedBlock();
+    }
+
+    public static void listenForLoads(Block block, Consumer<Block> listener)
+    {
+        requireNonNull(block, "block is null");
+        requireNonNull(listener, "listener is null");
+
+        LazyData.addListenersRecursive(block, singletonList(listener));
     }
 
     private static class RegionLazyBlockLoader
@@ -316,8 +329,12 @@ public class LazyBlock
 
     private static class LazyData
     {
+        @Nullable
         private LazyBlockLoader loader;
+        @Nullable
         private Block block;
+        @Nullable
+        private List<Consumer<Block>> listeners;
 
         public LazyData(LazyBlockLoader loader)
         {
@@ -331,33 +348,78 @@ public class LazyBlock
 
         public Block getBlock()
         {
-            if (block != null) {
-                return block;
-            }
-
-            singleLevelLoad();
+            load(false);
             return block;
         }
 
-        public void recursiveLoad()
+        public Block getFullyLoadedBlock()
         {
-            block = getBlock().getLoadedBlock();
+            load(true);
+            return block;
         }
 
-        private void singleLevelLoad()
+        private void addListeners(List<Consumer<Block>> listeners)
         {
-            block = requireNonNull(loader.load(), "loader returned null");
+            if (isLoaded()) {
+                throw new IllegalStateException("Block is already loaded");
+            }
+            if (this.listeners == null) {
+                this.listeners = new ArrayList<>();
+            }
+            this.listeners.addAll(listeners);
+        }
 
-            while (block instanceof LazyBlock) {
-                block = ((LazyBlock) block).getBlock();
+        private void load(boolean recursive)
+        {
+            if (loader == null) {
+                return;
             }
 
-            if (block == null) {
-                throw new IllegalArgumentException("Lazy block loader did not load this block");
+            block = requireNonNull(loader.load(), "loader returned null");
+
+            if (recursive) {
+                block = block.getLoadedBlock();
+            }
+            else {
+                // load and remove directly nested lazy blocks
+                while (block instanceof LazyBlock) {
+                    block = ((LazyBlock) block).getBlock();
+                }
             }
 
             // clear reference to loader to free resources, since load was successful
             loader = null;
+
+            // notify listeners
+            List<Consumer<Block>> listeners = this.listeners;
+            this.listeners = null;
+            if (listeners != null) {
+                listeners.forEach(listener -> listener.accept(block));
+
+                // add listeners to unloaded child blocks
+                if (!recursive) {
+                    addListenersRecursive(block, listeners);
+                }
+            }
+        }
+
+        /**
+         * If block is unloaded, add the listeners; otherwise call this method on child blocks
+         */
+        @SuppressWarnings("AccessingNonPublicFieldOfAnotherObject")
+        private static void addListenersRecursive(Block block, List<Consumer<Block>> listeners)
+        {
+            if (block instanceof LazyBlock) {
+                LazyData lazyData = ((LazyBlock) block).lazyData;
+                if (!lazyData.isLoaded()) {
+                    lazyData.addListeners(listeners);
+                    return;
+                }
+            }
+
+            for (Block child : block.getChildren()) {
+                addListenersRecursive(child, listeners);
+            }
         }
     }
 }
