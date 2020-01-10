@@ -26,6 +26,8 @@ import java.util.function.Consumer;
 
 import static io.prestosql.spi.block.BlockUtil.checkArrayRange;
 import static io.prestosql.spi.block.BlockUtil.checkValidRegion;
+import static java.lang.Integer.max;
+import static java.lang.Math.min;
 import static java.lang.String.format;
 import static java.util.Collections.singletonList;
 import static java.util.Objects.requireNonNull;
@@ -34,21 +36,43 @@ import static java.util.Objects.requireNonNull;
 public class LazyBlock
         implements Block
 {
-    private static final int INSTANCE_SIZE = ClassLayout.parseClass(LazyBlock.class).instanceSize() + ClassLayout.parseClass(LazyData.class).instanceSize();
+    private static final int INSTANCE_SIZE = ClassLayout.parseClass(LazyBlock.class).instanceSize() + ClassLayout.parseClass(LazyLoadListeners.class).instanceSize();
 
-    private final int positionCount;
-    private final LazyData lazyData;
+    @Nullable
+    private final int[] positions;
+    private final int offset;
+    private final int size;
+
+    @Nullable
+    private PartialLazyBlockLoader loader;
+    @Nullable
+    private Block block;
+
+    private final LazyLoadListeners listeners;
 
     public LazyBlock(int positionCount, LazyBlockLoader loader)
     {
-        this.positionCount = positionCount;
-        this.lazyData = new LazyData(positionCount, loader);
+        this(positionCount, new PartialLazyBlockLoaderAdapter(positionCount, loader));
+    }
+
+    public LazyBlock(int positionCount, PartialLazyBlockLoader loader)
+    {
+        this(null, 0, positionCount, loader, new LazyLoadListeners());
+    }
+
+    private LazyBlock(@Nullable int[] positions, int offset, int size, PartialLazyBlockLoader loader, LazyLoadListeners listeners)
+    {
+        this.positions = positions;
+        this.offset = offset;
+        this.size = size;
+        this.loader = requireNonNull(loader, "loader is null");
+        this.listeners = requireNonNull(listeners, "listeners is null");
     }
 
     @Override
     public int getPositionCount()
     {
-        return positionCount;
+        return size;
     }
 
     @Override
@@ -216,13 +240,30 @@ public class LazyBlock
     }
 
     @Override
-    public Block getPositions(int[] positions, int offset, int length)
+    public Block getPositions(int[] selectedPositions, int offset, int length)
     {
         if (isLoaded()) {
-            return getBlock().getPositions(positions, offset, length);
+            return getBlock().getPositions(selectedPositions, offset, length);
         }
-        checkArrayRange(positions, offset, length);
-        return new LazyBlock(length, new PositionLazyBlockLoader(lazyData, positions, offset, length));
+        checkArrayRange(selectedPositions, offset, length);
+
+        int[] newPositions = new int[length];
+        if (positions != null) {
+            for (int i = 0; i < length; i++) {
+                newPositions[i] = positions[selectedPositions[offset + i]] + this.offset;
+            }
+        }
+        else {
+            for (int i = 0; i < length; i++) {
+                newPositions[i] = selectedPositions[offset + i] + this.offset;
+            }
+        }
+        for (int newPosition : newPositions) {
+            if (newPosition < 0 || newPosition >= size) {
+                throw new IllegalArgumentException("position is not valid");
+            }
+        }
+        return new LazyBlock(newPositions, 0, newPositions.length, loader, listeners);
     }
 
     @Override
@@ -238,7 +279,7 @@ public class LazyBlock
             return getBlock().getRegion(positionOffset, length);
         }
         checkValidRegion(getPositionCount(), positionOffset, length);
-        return new LazyBlock(length, new RegionLazyBlockLoader(lazyData, positionOffset, length));
+        return new LazyBlock(positions, offset + positionOffset, length, loader, listeners);
     }
 
     @Override
@@ -261,19 +302,21 @@ public class LazyBlock
 
     public Block getBlock()
     {
-        return lazyData.getBlock();
+        load(false);
+        return block;
     }
 
     @Override
     public boolean isLoaded()
     {
-        return lazyData.isLoaded();
+        return block != null && block.isLoaded();
     }
 
     @Override
     public Block getLoadedBlock()
     {
-        return lazyData.getFullyLoadedBlock();
+        load(true);
+        return block;
     }
 
     public static void listenForLoads(Block block, Consumer<Block> listener)
@@ -281,89 +324,51 @@ public class LazyBlock
         requireNonNull(block, "block is null");
         requireNonNull(listener, "listener is null");
 
-        LazyData.addListenersRecursive(block, singletonList(listener));
+        LazyLoadListeners.addListenersRecursive(block, singletonList(listener));
     }
 
-    private static class RegionLazyBlockLoader
-            implements LazyBlockLoader
+    private void load(boolean recursive)
     {
-        private final LazyData delegate;
-        private final int positionOffset;
-        private final int length;
-
-        public RegionLazyBlockLoader(LazyData delegate, int positionOffset, int length)
-        {
-            this.delegate = requireNonNull(delegate, "delegate is null");
-            this.positionOffset = positionOffset;
-            this.length = length;
+        if (loader == null) {
+            return;
         }
 
-        @Override
-        public Block load()
-        {
-            return delegate.getBlock().getRegion(positionOffset, length);
+        if (positions == null) {
+            block = requireNonNull(loader.load(offset, size), "loader returned null");
         }
+        else {
+            block = requireNonNull(loader.load(positions, offset, size), "loader returned null");
+        }
+        if (block.getPositionCount() != size) {
+            throw new IllegalStateException(format("Loaded block positions count (%s) doesn't match lazy block positions count (%s)", block.getPositionCount(), size));
+        }
+
+        if (recursive) {
+            block = block.getLoadedBlock();
+        }
+        else {
+            // load and remove directly nested lazy blocks
+            while (block instanceof LazyBlock) {
+                block = ((LazyBlock) block).getBlock();
+            }
+        }
+
+        // clear reference to loader to free resources, since load was successful
+        loader = null;
+
+        // notify listeners
+        listeners.blockLoaded(block, recursive);
     }
 
-    private static class PositionLazyBlockLoader
-            implements LazyBlockLoader
+    private static class LazyLoadListeners
     {
-        private final LazyData delegate;
-        private final int[] positions;
-        private final int offset;
-        private final int length;
-
-        public PositionLazyBlockLoader(LazyData delegate, int[] positions, int offset, int length)
-        {
-            this.delegate = requireNonNull(delegate, "delegate is null");
-            this.positions = requireNonNull(positions, "positions is null");
-            this.offset = offset;
-            this.length = length;
-        }
-
-        @Override
-        public Block load()
-        {
-            return delegate.getBlock().getPositions(positions, offset, length);
-        }
-    }
-
-    private static class LazyData
-    {
-        private final int positionsCount;
-        @Nullable
-        private LazyBlockLoader loader;
-        @Nullable
-        private Block block;
         @Nullable
         private List<Consumer<Block>> listeners;
-
-        public LazyData(int positionsCount, LazyBlockLoader loader)
-        {
-            this.positionsCount = positionsCount;
-            this.loader = requireNonNull(loader, "loader is null");
-        }
-
-        public boolean isLoaded()
-        {
-            return block != null && block.isLoaded();
-        }
-
-        public Block getBlock()
-        {
-            load(false);
-            return block;
-        }
-
-        public Block getFullyLoadedBlock()
-        {
-            load(true);
-            return block;
-        }
+        private boolean hasFired;
 
         private void addListeners(List<Consumer<Block>> listeners)
         {
-            if (isLoaded()) {
+            if (hasFired) {
                 throw new IllegalStateException("Block is already loaded");
             }
             if (this.listeners == null) {
@@ -372,34 +377,13 @@ public class LazyBlock
             this.listeners.addAll(listeners);
         }
 
-        private void load(boolean recursive)
+        private void blockLoaded(Block block, boolean recursive)
         {
-            if (loader == null) {
-                return;
-            }
-
-            block = requireNonNull(loader.load(), "loader returned null");
-            if (block.getPositionCount() != positionsCount) {
-                throw new IllegalStateException(format("Loaded block positions count (%s) doesn't match lazy block positions count (%s)", block.getPositionCount(), positionsCount));
-            }
-
-            if (recursive) {
-                block = block.getLoadedBlock();
-            }
-            else {
-                // load and remove directly nested lazy blocks
-                while (block instanceof LazyBlock) {
-                    block = ((LazyBlock) block).getBlock();
-                }
-            }
-
-            // clear reference to loader to free resources, since load was successful
-            loader = null;
-
             // notify listeners
             List<Consumer<Block>> listeners = this.listeners;
             this.listeners = null;
             if (listeners != null) {
+                hasFired = true;
                 listeners.forEach(listener -> listener.accept(block));
 
                 // add listeners to unloaded child blocks
@@ -415,17 +399,82 @@ public class LazyBlock
         @SuppressWarnings("AccessingNonPublicFieldOfAnotherObject")
         private static void addListenersRecursive(Block block, List<Consumer<Block>> listeners)
         {
-            if (block instanceof LazyBlock) {
-                LazyData lazyData = ((LazyBlock) block).lazyData;
-                if (!lazyData.isLoaded()) {
-                    lazyData.addListeners(listeners);
-                    return;
-                }
+            if (block instanceof LazyBlock && !block.isLoaded()) {
+                LazyLoadListeners lazyData = ((LazyBlock) block).listeners;
+                lazyData.addListeners(listeners);
+                return;
             }
 
             for (Block child : block.getChildren()) {
                 addListenersRecursive(child, listeners);
             }
+        }
+    }
+
+    private static class PartialLazyBlockLoaderAdapter
+            implements PartialLazyBlockLoader
+    {
+        private final int positionsCount;
+        @Nullable
+        private LazyBlockLoader loader;
+        @Nullable
+        private Block block;
+
+        private int currentPosition;
+
+        public PartialLazyBlockLoaderAdapter(int positionsCount, LazyBlockLoader loader)
+        {
+            this.positionsCount = positionsCount;
+            this.loader = requireNonNull(loader, "loader is null");
+        }
+
+        @Override
+        public Block load(int positionOffset, int length)
+        {
+            if (currentPosition > positionOffset) {
+                throw new IllegalStateException(format("LazyBlock already advanced beyond position %s", positionOffset));
+            }
+
+            Block blockRegion = getLoadedBlock().getRegion(positionOffset, length);
+            currentPosition = positionOffset + length;
+            return blockRegion;
+        }
+
+        @Override
+        public Block load(int[] positions, int offset, int length)
+        {
+            if (length == 0) {
+                return getLoadedBlock().getPositions(positions, offset, length);
+            }
+
+            int min = Integer.MAX_VALUE;
+            int max = 0;
+            for (int i = 0; i < length; i++) {
+                int position = positions[i + offset];
+                min = min(min, position);
+                max = max(max, position);
+            }
+            if (currentPosition > min) {
+                throw new IllegalStateException(format("LazyBlock already advanced beyond position %s", min));
+            }
+
+            Block blockPositions = getLoadedBlock().getPositions(positions, offset, length);
+            currentPosition = max;
+            return blockPositions;
+        }
+
+        private Block getLoadedBlock()
+        {
+            if (loader == null) {
+                return block;
+            }
+
+            block = requireNonNull(loader.load(), "loader returned null");
+            if (block.getPositionCount() != positionsCount) {
+                throw new IllegalStateException(format("Loaded block positions count (%s) doesn't match lazy block positions count (%s)", block.getPositionCount(), positionsCount));
+            }
+            loader = null;
+            return block;
         }
     }
 }
