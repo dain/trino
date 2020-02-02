@@ -83,9 +83,9 @@ import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.util.concurrent.Futures.immediateFuture;
 import static io.airlift.http.client.FullJsonResponseHandler.createFullJsonResponseHandler;
 import static io.airlift.http.client.HttpUriBuilder.uriBuilderFrom;
+import static io.airlift.http.client.JsonBodyGenerator.jsonBodyGenerator;
 import static io.airlift.http.client.Request.Builder.prepareDelete;
 import static io.airlift.http.client.Request.Builder.preparePost;
-import static io.airlift.http.client.StaticBodyGenerator.createStaticBodyGenerator;
 import static io.prestosql.execution.TaskInfo.createInitialTask;
 import static io.prestosql.execution.TaskState.ABORTED;
 import static io.prestosql.execution.TaskState.FAILED;
@@ -510,16 +510,12 @@ public final class HttpRemoteTask
                 sources,
                 outputBuffers.get(),
                 totalPartitions);
-        byte[] taskUpdateRequestJson = taskUpdateRequestCodec.toJsonBytes(updateRequest);
-        if (fragment.isPresent()) {
-            stats.updateWithPlanBytes(taskUpdateRequestJson.length);
-        }
 
         HttpUriBuilder uriBuilder = getHttpUriBuilder(taskStatus);
         Request request = preparePost()
                 .setUri(uriBuilder.build())
                 .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.JSON_UTF_8.toString())
-                .setBodyGenerator(createStaticBodyGenerator(taskUpdateRequestJson))
+                .setBodyGenerator(jsonBodyGenerator(taskUpdateRequestCodec, updateRequest))
                 .build();
 
         updateErrorTracker.startRequest();
