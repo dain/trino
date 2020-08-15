@@ -106,7 +106,7 @@ public final class MapToMapCast
     }
 
     @Override
-    public ScalarFunctionImplementation specialize(BoundSignature boundSignature, FunctionDependencies functionDependencies)
+    public SpecializedSqlScalarFunction specialize(BoundSignature boundSignature, FunctionDependencies functionDependencies)
     {
         checkArgument(boundSignature.getArity() == 1, "Expected arity to be 1");
         MapType fromMapType = (MapType) boundSignature.getArgumentType(0);
@@ -121,7 +121,7 @@ public final class MapToMapCast
         BlockPositionIsDistinctFrom keyEqual = blockTypeOperators.getDistinctFromOperator(toKeyType);
         BlockPositionHashCode keyHashCode = blockTypeOperators.getHashCodeOperator(toKeyType);
         MethodHandle target = MethodHandles.insertArguments(METHOD_HANDLE, 0, keyProcessor, valueProcessor, toMapType, keyEqual, keyHashCode);
-        return new ChoicesScalarFunctionImplementation(boundSignature, NULLABLE_RETURN, ImmutableList.of(NEVER_NULL), target);
+        return new ChoicesSpecializedSqlScalarFunction(boundSignature, NULLABLE_RETURN, ImmutableList.of(NEVER_NULL), target);
     }
 
     /**
