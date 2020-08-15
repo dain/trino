@@ -150,7 +150,7 @@ public class GlobalFunctionCatalog
         return functions.getFunctionBundle(functionId).getFunctionDependencies(functionId, boundSignature);
     }
 
-    public FunctionInvoker getScalarFunctionInvoker(
+    public ScalarImplementation getScalarImplementation(
             FunctionId functionId,
             BoundSignature boundSignature,
             FunctionDependencies functionDependencies,

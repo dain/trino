@@ -124,9 +124,9 @@ public class InCodeGenerator
 
         SwitchGenerationCase switchGenerationCase = checkSwitchGenerationCase(type, testExpressions);
 
-        MethodHandle equalsMethodHandle = generatorContext.getScalarFunctionInvoker(resolvedEqualsFunction, simpleConvention(NULLABLE_RETURN, NEVER_NULL, NEVER_NULL)).getMethodHandle();
-        MethodHandle hashCodeMethodHandle = generatorContext.getScalarFunctionInvoker(resolvedHashCodeFunction, simpleConvention(FAIL_ON_NULL, NEVER_NULL)).getMethodHandle();
-        MethodHandle indeterminateMethodHandle = generatorContext.getScalarFunctionInvoker(resolvedIsIndeterminate, simpleConvention(FAIL_ON_NULL, NEVER_NULL)).getMethodHandle();
+        MethodHandle equalsMethodHandle = generatorContext.getScalarImplementation(resolvedEqualsFunction, simpleConvention(NULLABLE_RETURN, NEVER_NULL, NEVER_NULL)).getMethodHandle();
+        MethodHandle hashCodeMethodHandle = generatorContext.getScalarImplementation(resolvedHashCodeFunction, simpleConvention(FAIL_ON_NULL, NEVER_NULL)).getMethodHandle();
+        MethodHandle indeterminateMethodHandle = generatorContext.getScalarImplementation(resolvedIsIndeterminate, simpleConvention(FAIL_ON_NULL, NEVER_NULL)).getMethodHandle();
 
         ImmutableListMultimap.Builder<Integer, BytecodeNode> hashBucketsBuilder = ImmutableListMultimap.builder();
         ImmutableList.Builder<BytecodeNode> defaultBucket = ImmutableList.builder();

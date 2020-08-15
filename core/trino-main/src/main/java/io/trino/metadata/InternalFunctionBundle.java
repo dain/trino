@@ -109,7 +109,7 @@ public class InternalFunctionBundle
     }
 
     @Override
-    public FunctionInvoker getScalarFunctionInvoker(
+    public ScalarImplementation getScalarFunctionInvoker(
             FunctionId functionId,
             BoundSignature boundSignature,
             FunctionDependencies functionDependencies,
@@ -126,7 +126,7 @@ public class InternalFunctionBundle
             throwIfInstanceOf(e.getCause(), TrinoException.class);
             throw new RuntimeException(e.getCause());
         }
-        return specializedSqlScalarFunction.getScalarFunctionInvoker(invocationConvention);
+        return specializedSqlScalarFunction.getScalarImplementation(invocationConvention);
     }
 
     private SpecializedSqlScalarFunction specializeScalarFunction(FunctionId functionId, BoundSignature boundSignature, FunctionDependencies functionDependencies)
