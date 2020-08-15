@@ -53,7 +53,9 @@ public class GenericComparisonUnorderedLastOperator
         Type type = boundSignature.getArgumentType(0);
         return invocationConvention -> {
             MethodHandle methodHandle = typeOperators.getComparisonUnorderedLastOperator(type, invocationConvention);
-            return new FunctionInvoker(methodHandle);
+            return FunctionInvoker.builder()
+                    .setMethodHandle(methodHandle)
+                    .build();
         };
     }
 }
