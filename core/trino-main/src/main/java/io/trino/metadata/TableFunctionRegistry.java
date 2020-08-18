@@ -32,6 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 import static io.trino.metadata.FunctionResolver.toPath;
+import static io.trino.metadata.MetadataManager.toQualifiedFunctionName;
 import static java.util.Locale.ENGLISH;
 import static java.util.Objects.requireNonNull;
 
@@ -71,7 +72,7 @@ public class TableFunctionRegistry
      */
     public TableFunctionMetadata resolve(Session session, QualifiedName qualifiedName)
     {
-        for (CatalogSchemaFunctionName name : toPath(session, qualifiedName)) {
+        for (CatalogSchemaFunctionName name : toPath(session, toQualifiedFunctionName(qualifiedName))) {
             CatalogName catalogName = new CatalogName(name.getCatalogName());
             Map<SchemaFunctionName, TableFunctionMetadata> catalogFunctions = tableFunctions.get(catalogName);
             if (catalogFunctions != null) {
