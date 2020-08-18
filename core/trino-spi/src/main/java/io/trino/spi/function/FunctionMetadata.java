@@ -11,16 +11,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.trino.metadata;
+package io.trino.spi.function;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.primitives.Booleans;
-import io.trino.spi.function.FunctionKind;
-
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static io.trino.spi.function.FunctionKind.AGGREGATE;
 import static io.trino.spi.function.FunctionKind.SCALAR;
 import static io.trino.spi.function.FunctionKind.WINDOW;
@@ -53,7 +49,9 @@ public class FunctionMetadata
         this.signature = requireNonNull(signature, "signature is null");
         this.canonicalName = requireNonNull(canonicalName, "canonicalName is null");
         this.functionNullability = requireNonNull(functionNullability, "functionNullability is null");
-        checkArgument(functionNullability.getArgumentNullable().size() == signature.getArgumentTypes().size(), "signature and functionNullability must have same argument count");
+        if (functionNullability.getArgumentNullable().size() != signature.getArgumentTypes().size()) {
+            throw new IllegalArgumentException("signature and functionNullability must have same argument count");
+        }
 
         this.hidden = hidden;
         this.deterministic = deterministic;
@@ -168,7 +166,7 @@ public class FunctionMetadata
         public Builder signature(Signature signature)
         {
             this.signature = signature;
-            if (Signature.isOperatorName(signature.getName())) {
+            if (signature.isOperator()) {
                 hidden = true;
                 description = "";
             }
@@ -190,12 +188,16 @@ public class FunctionMetadata
         public Builder argumentNullability(boolean... argumentNullability)
         {
             requireNonNull(argumentNullability, "argumentNullability is null");
-            return argumentNullability(ImmutableList.copyOf(Booleans.asList(argumentNullability)));
+            List<Boolean> list = new ArrayList<>(argumentNullability.length);
+            for (boolean nullability : argumentNullability) {
+                list.add(nullability);
+            }
+            return argumentNullability(list);
         }
 
         public Builder argumentNullability(List<Boolean> argumentNullability)
         {
-            this.argumentNullability = argumentNullability;
+            this.argumentNullability = List.copyOf(requireNonNull(argumentNullability, "argumentNullability is null"));
             return this;
         }
 
@@ -223,7 +225,9 @@ public class FunctionMetadata
         public Builder description(String description)
         {
             requireNonNull(description, "description is null");
-            checkArgument(!description.isEmpty(), "description is empty");
+            if (description.isBlank()) {
+                throw new IllegalArgumentException("description is blank");
+            }
             this.description = description;
             return this;
         }

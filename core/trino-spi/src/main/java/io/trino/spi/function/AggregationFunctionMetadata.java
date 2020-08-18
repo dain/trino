@@ -11,16 +11,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.trino.metadata;
+package io.trino.spi.function;
 
-import com.google.common.collect.ImmutableList;
 import io.trino.spi.type.Type;
 import io.trino.spi.type.TypeSignature;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.StringJoiner;
 
-import static com.google.common.base.MoreObjects.toStringHelper;
 import static java.util.Objects.requireNonNull;
 
 public class AggregationFunctionMetadata
@@ -31,7 +30,7 @@ public class AggregationFunctionMetadata
     private AggregationFunctionMetadata(boolean orderSensitive, List<TypeSignature> intermediateTypes)
     {
         this.orderSensitive = orderSensitive;
-        this.intermediateTypes = ImmutableList.copyOf(requireNonNull(intermediateTypes, "intermediateTypes is null"));
+        this.intermediateTypes = List.copyOf(requireNonNull(intermediateTypes, "intermediateTypes is null"));
     }
 
     public boolean isOrderSensitive()
@@ -52,9 +51,9 @@ public class AggregationFunctionMetadata
     @Override
     public String toString()
     {
-        return toStringHelper(this)
-                .add("orderSensitive", orderSensitive)
-                .add("intermediateTypes", intermediateTypes)
+        return new StringJoiner(", ", AggregationFunctionMetadata.class.getSimpleName() + "[", "]")
+                .add("orderSensitive=" + orderSensitive)
+                .add("intermediateTypes=" + intermediateTypes)
                 .toString();
     }
 

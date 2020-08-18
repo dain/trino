@@ -11,12 +11,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.trino.metadata;
+package io.trino.spi.function;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.Objects;
+
+import static java.util.Objects.requireNonNull;
 
 public class LongVariableConstraint
 {
@@ -25,8 +27,8 @@ public class LongVariableConstraint
 
     LongVariableConstraint(String name, String expression)
     {
-        this.name = name;
-        this.expression = expression;
+        this.name = requireNonNull(name, "name is null");
+        this.expression = requireNonNull(expression, "expression is null");
     }
 
     @JsonProperty

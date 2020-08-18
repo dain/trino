@@ -11,12 +11,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.trino.metadata;
+package io.trino.spi.function;
 
 import java.util.Objects;
 import java.util.Optional;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Objects.requireNonNull;
 
 public class QualifiedFunctionName
@@ -43,12 +42,20 @@ public class QualifiedFunctionName
     private QualifiedFunctionName(Optional<String> catalogName, Optional<String> schemaName, String functionName)
     {
         this.catalogName = requireNonNull(catalogName, "catalogName is null");
-        catalogName.ifPresent(name -> checkArgument(!name.isEmpty(), "catalogName is empty"));
+        if (catalogName.map(String::isEmpty).orElse(false)) {
+            throw new IllegalArgumentException("catalogName is empty");
+        }
         this.schemaName = requireNonNull(schemaName, "schemaName is null");
-        schemaName.ifPresent(name -> checkArgument(!name.isEmpty(), "schemaName is empty"));
-        checkArgument(catalogName.isEmpty() || schemaName.isPresent(), "Schema name must be provided when catalog name is provided");
+        if (schemaName.map(String::isEmpty).orElse(false)) {
+            throw new IllegalArgumentException("schemaName is empty");
+        }
+        if (catalogName.isPresent() && schemaName.isEmpty()) {
+            throw new IllegalArgumentException("Schema name must be provided when catalog name is provided");
+        }
         this.functionName = requireNonNull(functionName, "functionName is null");
-        checkArgument(!functionName.isEmpty(), "functionName is empty");
+        if (functionName.isEmpty()) {
+            throw new IllegalArgumentException("functionName is empty");
+        }
     }
 
     public Optional<String> getCatalogName()

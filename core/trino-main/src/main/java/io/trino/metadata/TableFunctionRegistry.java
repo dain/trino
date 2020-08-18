@@ -16,6 +16,7 @@ package io.trino.metadata;
 import com.google.common.collect.ImmutableMap;
 import io.trino.Session;
 import io.trino.connector.CatalogName;
+import io.trino.spi.function.SchemaFunctionName;
 import io.trino.spi.ptf.ArgumentSpecification;
 import io.trino.spi.ptf.ConnectorTableFunction;
 import io.trino.spi.ptf.TableArgumentSpecification;

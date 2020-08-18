@@ -11,9 +11,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.trino.metadata;
-
-import com.google.common.collect.ImmutableList;
+package io.trino.spi.function;
 
 import java.lang.invoke.MethodHandle;
 import java.util.List;
@@ -31,7 +29,7 @@ public class ScalarImplementation
     {
         this.methodHandle = requireNonNull(methodHandle, "methodHandle is null");
         this.instanceFactory = requireNonNull(instanceFactory, "instanceFactory is null");
-        this.lambdaInterfaces = ImmutableList.copyOf(requireNonNull(lambdaInterfaces, "lambdaInterfaces is null"));
+        this.lambdaInterfaces = List.copyOf(requireNonNull(lambdaInterfaces, "lambdaInterfaces is null"));
     }
 
     public MethodHandle getMethodHandle()
@@ -58,7 +56,7 @@ public class ScalarImplementation
     {
         private MethodHandle methodHandle;
         private MethodHandle instanceFactory;
-        private List<Class<?>> lambdaInterfaces = ImmutableList.of();
+        private List<Class<?>> lambdaInterfaces = List.of();
 
         private Builder() {}
 
@@ -76,7 +74,7 @@ public class ScalarImplementation
 
         public Builder setLambdaInterfaces(List<Class<?>> lambdaInterfaces)
         {
-            this.lambdaInterfaces = ImmutableList.copyOf(requireNonNull(lambdaInterfaces, "lambdaInterfaces is null"));
+            this.lambdaInterfaces = List.copyOf(requireNonNull(lambdaInterfaces, "lambdaInterfaces is null"));
             return this;
         }
 

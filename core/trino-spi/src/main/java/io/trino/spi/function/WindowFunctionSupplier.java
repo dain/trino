@@ -11,9 +11,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.trino.operator.window;
-
-import io.trino.spi.function.WindowFunction;
+package io.trino.spi.function;
 
 import java.util.List;
 import java.util.function.Supplier;
