@@ -17,6 +17,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import io.airlift.slice.Slice;
+import io.trino.connector.CatalogName;
 import io.trino.metadata.FunctionBinding;
 import io.trino.metadata.FunctionManager;
 import io.trino.metadata.InternalFunctionDependencies;
@@ -71,6 +72,7 @@ import static com.google.common.collect.ImmutableSet.toImmutableSet;
 import static com.google.common.collect.Iterables.getOnlyElement;
 import static io.trino.SessionTestUtils.TEST_SESSION;
 import static io.trino.metadata.FunctionManager.createTestingFunctionManager;
+import static io.trino.metadata.GlobalFunctionCatalog.GLOBAL_CATALOG;
 import static io.trino.metadata.MetadataManager.createTestMetadataManager;
 import static io.trino.operator.aggregation.AggregationFromAnnotationsParser.parseFunctionDefinitions;
 import static io.trino.operator.aggregation.AggregationFromAnnotationsParser.toAccumulatorStateDetails;
@@ -1172,7 +1174,7 @@ public class TestAnnotationEngineForAggregates
         assertFalse(aggregationMetadata.isOrderSensitive());
         assertFalse(aggregationMetadata.getIntermediateTypes().isEmpty());
 
-        ResolvedFunction resolvedFunction = METADATA.resolve(TEST_SESSION, functionBinding, functionMetadata, aggregation.getFunctionDependencies(boundSignature));
+        ResolvedFunction resolvedFunction = METADATA.resolve(TEST_SESSION, new CatalogName(GLOBAL_CATALOG), functionBinding, functionMetadata, aggregation.getFunctionDependencies(boundSignature));
         FunctionDependencies functionDependencies = new InternalFunctionDependencies(FUNCTION_MANAGER::getScalarImplementation, resolvedFunction.getTypeDependencies(), resolvedFunction.getFunctionDependencies());
         aggregation.specialize(boundSignature, functionDependencies);
     }

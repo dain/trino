@@ -26,6 +26,7 @@ import io.airlift.json.JsonCodec;
 import io.airlift.json.JsonCodecFactory;
 import io.airlift.json.ObjectMapperProvider;
 import io.trino.collect.cache.NonEvictableLoadingCache;
+import io.trino.connector.CatalogName;
 import io.trino.spi.function.BoundSignature;
 import io.trino.spi.function.FunctionId;
 import io.trino.spi.function.FunctionKind;
@@ -60,6 +61,7 @@ public class ResolvedFunction
 {
     private static final String PREFIX = "@";
     private final BoundSignature signature;
+    private final CatalogName catalog;
     private final FunctionId functionId;
     private final FunctionKind functionKind;
     private final boolean deterministic;
@@ -70,6 +72,7 @@ public class ResolvedFunction
     @JsonCreator
     public ResolvedFunction(
             @JsonProperty("signature") BoundSignature signature,
+            @JsonProperty("catalog") CatalogName catalog,
             @JsonProperty("id") FunctionId functionId,
             @JsonProperty("functionKind") FunctionKind functionKind,
             @JsonProperty("deterministic") boolean deterministic,
@@ -78,6 +81,7 @@ public class ResolvedFunction
             @JsonProperty("functionDependencies") Set<ResolvedFunction> functionDependencies)
     {
         this.signature = requireNonNull(signature, "signature is null");
+        this.catalog = requireNonNull(catalog, "catalog is null");
         this.functionId = requireNonNull(functionId, "functionId is null");
         this.functionKind = requireNonNull(functionKind, "functionKind is null");
         this.deterministic = deterministic;
@@ -91,6 +95,12 @@ public class ResolvedFunction
     public BoundSignature getSignature()
     {
         return signature;
+    }
+
+    @JsonProperty
+    public CatalogName getCatalog()
+    {
+        return catalog;
     }
 
     @JsonProperty("id")
@@ -161,6 +171,7 @@ public class ResolvedFunction
         }
         ResolvedFunction that = (ResolvedFunction) o;
         return Objects.equals(signature, that.signature) &&
+                Objects.equals(catalog, that.catalog) &&
                 Objects.equals(functionId, that.functionId) &&
                 Objects.equals(functionKind, that.functionKind) &&
                 deterministic == that.deterministic &&
@@ -171,7 +182,7 @@ public class ResolvedFunction
     @Override
     public int hashCode()
     {
-        return Objects.hash(signature, functionId, functionKind, deterministic, typeDependencies, functionDependencies);
+        return Objects.hash(signature, catalog, functionId, functionKind, deterministic, typeDependencies, functionDependencies);
     }
 
     @Override

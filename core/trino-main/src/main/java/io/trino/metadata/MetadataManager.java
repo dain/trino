@@ -28,6 +28,7 @@ import io.trino.Session;
 import io.trino.collect.cache.NonEvictableCache;
 import io.trino.connector.CatalogName;
 import io.trino.metadata.Catalog.SecurityManagement;
+import io.trino.metadata.FunctionResolver.CatalogFunctionBinding;
 import io.trino.metadata.ResolvedFunction.ResolvedFunctionDecoder;
 import io.trino.spi.QueryId;
 import io.trino.spi.TrinoException;
@@ -99,9 +100,11 @@ import io.trino.spi.type.TypeManager;
 import io.trino.spi.type.TypeNotFoundException;
 import io.trino.spi.type.TypeOperators;
 import io.trino.spi.type.TypeSignature;
+import io.trino.sql.SqlPathElement;
 import io.trino.sql.analyzer.TypeSignatureProvider;
 import io.trino.sql.planner.ConnectorExpressions;
 import io.trino.sql.planner.PartitioningHandle;
+import io.trino.sql.tree.Identifier;
 import io.trino.sql.tree.QualifiedName;
 import io.trino.transaction.TransactionManager;
 import io.trino.type.BlockTypeOperators;
@@ -2040,7 +2043,15 @@ public final class MetadataManager
     @Override
     public Collection<FunctionMetadata> listFunctions(Session session)
     {
-        return functions.listFunctions();
+        ImmutableList.Builder<FunctionMetadata> functions = ImmutableList.builder();
+        functions.addAll(this.functions.listFunctions());
+        for (SqlPathElement sqlPathElement : session.getPath().getParsedPath()) {
+            String catalog = sqlPathElement.getCatalog().map(Identifier::getValue).or(session::getCatalog)
+                    .orElseThrow(() -> new IllegalArgumentException("Session default catalog must be set to resolve a partial function name: " + null));
+            ConnectorSession connectorSession = session.toConnectorSession(catalog);
+            functions.addAll(getMetadata(session, new CatalogName(catalog)).listFunctions(connectorSession, sqlPathElement.getSchema().getValue().toLowerCase(ENGLISH)));
+        }
+        return functions.build();
     }
 
     @Override
@@ -2087,7 +2098,12 @@ public final class MetadataManager
 
     private ResolvedFunction resolvedFunctionInternal(Session session, QualifiedFunctionName name, List<TypeSignatureProvider> parameterTypes)
     {
-        return resolve(session, functionResolver.resolveFunction(session, name, parameterTypes, this::getFunctions));
+        CatalogFunctionBinding catalogFunctionBinding = functionResolver.resolveFunction(
+                session,
+                name,
+                parameterTypes,
+                catalogSchemaFunctionName -> getFunctions(session, catalogSchemaFunctionName));
+        return resolve(session, catalogFunctionBinding.getCatalog(), catalogFunctionBinding.getFunctionBinding());
     }
 
     // this is only public for TableFunctionRegistry, which is effectively part of MetadataManager but for some reason is a separate class
@@ -2112,7 +2128,7 @@ public final class MetadataManager
             // todo we should not be caching functions across session
             return uncheckedCacheGet(coercionCache, new CoercionCacheKey(operatorType, fromType, toType), () -> {
                 String name = mangleOperatorName(operatorType);
-                FunctionBinding functionBinding = functionResolver.resolveCoercion(
+                CatalogFunctionBinding catalogFunctionBinding = functionResolver.resolveCoercion(
                         session,
                         QualifiedFunctionName.of(name),
                         Signature.builder()
@@ -2120,8 +2136,8 @@ public final class MetadataManager
                                 .returnType(toType)
                                 .argumentType(fromType)
                                 .build(),
-                        this::getFunctions);
-                return resolve(session, functionBinding);
+                        catalogSchemaFunctionName -> getFunctions(session, catalogSchemaFunctionName));
+                return resolve(session, catalogFunctionBinding.getCatalog(), catalogFunctionBinding.getFunctionBinding());
             });
         }
         catch (UncheckedExecutionException e) {
@@ -2139,7 +2155,7 @@ public final class MetadataManager
     @Override
     public ResolvedFunction getCoercion(Session session, QualifiedName name, Type fromType, Type toType)
     {
-        FunctionBinding functionBinding = functionResolver.resolveCoercion(
+        CatalogFunctionBinding catalogFunctionBinding = functionResolver.resolveCoercion(
                 session,
                 toQualifiedFunctionName(name),
                 Signature.builder()
@@ -2147,19 +2163,29 @@ public final class MetadataManager
                         .returnType(toType)
                         .argumentType(fromType)
                         .build(),
-                this::getFunctions);
-        return resolve(session, functionBinding);
+                catalogSchemaFunctionName -> getFunctions(session, catalogSchemaFunctionName));
+        return resolve(session, catalogFunctionBinding.getCatalog(), catalogFunctionBinding.getFunctionBinding());
     }
 
-    private ResolvedFunction resolve(Session session, FunctionBinding functionBinding)
+    private ResolvedFunction resolve(Session session, CatalogName catalog, FunctionBinding functionBinding)
     {
-        FunctionDependencyDeclaration declaration = functions.getFunctionDependencies(functionBinding.getFunctionId(), functionBinding.getBoundSignature());
-        FunctionMetadata functionMetadata = getFunctionMetadata(functionBinding.getFunctionId(), functionBinding.getBoundSignature());
-        return resolve(session, functionBinding, functionMetadata, declaration);
+        FunctionDependencyDeclaration declaration = getFunctionDependencyDeclaration(session, catalog, functionBinding.getFunctionId(), functionBinding.getBoundSignature());
+        FunctionMetadata functionMetadata = getFunctionMetadata(session, catalog, functionBinding.getFunctionId(), functionBinding.getBoundSignature());
+        return resolve(session, catalog, functionBinding, functionMetadata, declaration);
+    }
+
+    private FunctionDependencyDeclaration getFunctionDependencyDeclaration(Session session, CatalogName catalog, FunctionId functionId, BoundSignature boundSignature)
+    {
+        if (catalog.getCatalogName().equals(GLOBAL_CATALOG)) {
+            return functions.getFunctionDependencies(functionId, boundSignature);
+        }
+        ConnectorSession connectorSession = session.toConnectorSession(catalog);
+        return getMetadata(session, catalog)
+                .getFunctionDependencies(connectorSession, functionId, boundSignature);
     }
 
     @VisibleForTesting
-    public ResolvedFunction resolve(Session session, FunctionBinding functionBinding, FunctionMetadata functionMetadata, FunctionDependencyDeclaration declaration)
+    public ResolvedFunction resolve(Session session, CatalogName catalog, FunctionBinding functionBinding, FunctionMetadata functionMetadata, FunctionDependencyDeclaration declaration)
     {
         Map<TypeSignature, Type> dependentTypes = declaration.getTypeDependencies().stream()
                 .map(typeSignature -> applyBoundVariables(typeSignature, functionBinding))
@@ -2217,6 +2243,7 @@ public final class MetadataManager
 
         return new ResolvedFunction(
                 functionBinding.getBoundSignature(),
+                new CatalogName(GLOBAL_CATALOG),
                 functionBinding.getFunctionId(),
                 functionMetadata.getKind(),
                 functionMetadata.isDeterministic(),
@@ -2228,26 +2255,37 @@ public final class MetadataManager
     @Override
     public boolean isAggregationFunction(Session session, QualifiedName name)
     {
-        return functionResolver.isAggregationFunction(session, toQualifiedFunctionName(name), this::getFunctions);
+        return functionResolver.isAggregationFunction(session, toQualifiedFunctionName(name), catalogSchemaFunctionName -> getFunctions(session, catalogSchemaFunctionName));
     }
 
-    private Collection<FunctionMetadata> getFunctions(CatalogSchemaFunctionName name)
+    private Collection<FunctionMetadata> getFunctions(Session session, CatalogSchemaFunctionName name)
     {
         if (name.getCatalogName().equals(GLOBAL_CATALOG)) {
             return functions.getFunctions(name.getSchemaFunctionName());
         }
-        return ImmutableList.of();
+
+        ConnectorSession connectorSession = session.toConnectorSession(name.getCatalogName());
+        return getMetadata(session, new CatalogName(name.getCatalogName()))
+                .getFunctions(connectorSession, name.getSchemaFunctionName());
     }
 
     @Override
     public FunctionMetadata getFunctionMetadata(Session session, ResolvedFunction resolvedFunction)
     {
-        return getFunctionMetadata(resolvedFunction.getFunctionId(), resolvedFunction.getSignature());
+        return getFunctionMetadata(session, resolvedFunction.getCatalog(), resolvedFunction.getFunctionId(), resolvedFunction.getSignature());
     }
 
-    private FunctionMetadata getFunctionMetadata(FunctionId functionId, BoundSignature signature)
+    private FunctionMetadata getFunctionMetadata(Session session, CatalogName catalog, FunctionId functionId, BoundSignature signature)
     {
-        FunctionMetadata functionMetadata = functions.getFunctionMetadata(functionId);
+        FunctionMetadata functionMetadata;
+        if (catalog.getCatalogName().equals(GLOBAL_CATALOG)) {
+            functionMetadata = functions.getFunctionMetadata(functionId);
+        }
+        else {
+            ConnectorSession connectorSession = session.toConnectorSession(catalog);
+            functionMetadata = getMetadata(session, catalog)
+                    .getFunctionMetadata(connectorSession, functionId);
+        }
 
         FunctionMetadata.Builder newMetadata = FunctionMetadata.builder(functionMetadata.getKind())
                 .functionId(functionMetadata.getFunctionId())
@@ -2292,7 +2330,18 @@ public final class MetadataManager
     @Override
     public AggregationFunctionMetadata getAggregationFunctionMetadata(Session session, ResolvedFunction resolvedFunction)
     {
-        AggregationFunctionMetadata aggregationFunctionMetadata = functions.getAggregationFunctionMetadata(resolvedFunction.getFunctionId());
+        Signature functionSignature;
+        AggregationFunctionMetadata aggregationFunctionMetadata;
+        if (resolvedFunction.getCatalog().getCatalogName().equals(GLOBAL_CATALOG)) {
+            functionSignature = functions.getFunctionMetadata(resolvedFunction.getFunctionId()).getSignature();
+            aggregationFunctionMetadata = functions.getAggregationFunctionMetadata(resolvedFunction.getFunctionId());
+        }
+        else {
+            ConnectorSession connectorSession = session.toConnectorSession(resolvedFunction.getCatalog());
+            ConnectorMetadata metadata = getMetadata(session, resolvedFunction.getCatalog());
+            functionSignature = metadata.getFunctionMetadata(connectorSession, resolvedFunction.getFunctionId()).getSignature();
+            aggregationFunctionMetadata = metadata.getAggregationFunctionMetadata(connectorSession, resolvedFunction.getFunctionId());
+        }
 
         AggregationFunctionMetadataBuilder builder = AggregationFunctionMetadata.builder();
         if (aggregationFunctionMetadata.isOrderSensitive()) {
@@ -2300,19 +2349,13 @@ public final class MetadataManager
         }
 
         if (!aggregationFunctionMetadata.getIntermediateTypes().isEmpty()) {
-            FunctionBinding functionBinding = toFunctionBinding(resolvedFunction);
+            FunctionBinding functionBinding = toFunctionBinding(resolvedFunction.getFunctionId(), resolvedFunction.getSignature(), functionSignature);
             aggregationFunctionMetadata.getIntermediateTypes().stream()
                     .map(typeSignature -> applyBoundVariables(typeSignature, functionBinding))
                     .forEach(builder::intermediateType);
         }
 
         return builder.build();
-    }
-
-    private FunctionBinding toFunctionBinding(ResolvedFunction resolvedFunction)
-    {
-        Signature functionSignature = functions.getFunctionMetadata(resolvedFunction.getFunctionId()).getSignature();
-        return toFunctionBinding(resolvedFunction.getFunctionId(), resolvedFunction.getSignature(), functionSignature);
     }
 
     @VisibleForTesting

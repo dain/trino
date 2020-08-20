@@ -94,6 +94,7 @@ import java.util.stream.IntStream;
 
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.collect.ImmutableList.toImmutableList;
+import static io.trino.metadata.GlobalFunctionCatalog.GLOBAL_CATALOG;
 import static io.trino.spi.function.FunctionId.toFunctionId;
 import static io.trino.spi.function.FunctionKind.SCALAR;
 import static io.trino.spi.type.BigintType.BIGINT;
@@ -1193,6 +1194,7 @@ public class TestEffectivePredicateExtractor
         BoundSignature boundSignature = new BoundSignature(name, UNKNOWN, ImmutableList.of());
         return new ResolvedFunction(
                 boundSignature,
+                new CatalogName(GLOBAL_CATALOG),
                 toFunctionId(boundSignature.toSignature()),
                 SCALAR,
                 true,

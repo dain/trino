@@ -77,6 +77,7 @@ import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
 
+import static io.trino.metadata.GlobalFunctionCatalog.GLOBAL_CATALOG;
 import static io.trino.metadata.RedirectionAwareTableHandle.noRedirection;
 import static io.trino.spi.StandardErrorCode.FUNCTION_NOT_FOUND;
 import static io.trino.spi.function.FunctionId.toFunctionId;
@@ -736,6 +737,7 @@ public abstract class AbstractMockMetadata
             BoundSignature boundSignature = new BoundSignature(nameSuffix, DOUBLE, ImmutableList.of());
             return new ResolvedFunction(
                     boundSignature,
+                    new CatalogName(GLOBAL_CATALOG),
                     toFunctionId(boundSignature.toSignature()),
                     SCALAR,
                     true,

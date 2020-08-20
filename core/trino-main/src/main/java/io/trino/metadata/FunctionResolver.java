@@ -17,6 +17,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Ordering;
 import io.trino.Session;
+import io.trino.connector.CatalogName;
 import io.trino.spi.TrinoException;
 import io.trino.spi.function.BoundSignature;
 import io.trino.spi.function.FunctionMetadata;
@@ -78,7 +79,7 @@ public class FunctionResolver
         return false;
     }
 
-    FunctionBinding resolveCoercion(Session session, QualifiedFunctionName name, Signature signature, Function<CatalogSchemaFunctionName, Collection<FunctionMetadata>> candidateLoader)
+    CatalogFunctionBinding resolveCoercion(Session session, QualifiedFunctionName name, Signature signature, Function<CatalogSchemaFunctionName, Collection<FunctionMetadata>> candidateLoader)
     {
         for (CatalogSchemaFunctionName catalogSchemaFunctionName : toPath(session, name)) {
             Collection<FunctionMetadata> candidates = candidateLoader.apply(catalogSchemaFunctionName);
@@ -87,7 +88,7 @@ public class FunctionResolver
                     .collect(toImmutableList());
             for (FunctionMetadata candidate : exactCandidates) {
                 if (canBindSignature(session, candidate.getSignature(), signature)) {
-                    return toFunctionBinding(candidate, signature);
+                    return new CatalogFunctionBinding(new CatalogName(catalogSchemaFunctionName.getCatalogName()), toFunctionBinding(candidate, signature));
                 }
             }
 
@@ -97,7 +98,7 @@ public class FunctionResolver
                     .collect(toImmutableList());
             for (FunctionMetadata candidate : genericCandidates) {
                 if (canBindSignature(session, candidate.getSignature(), signature)) {
-                    return toFunctionBinding(candidate, signature);
+                    return new CatalogFunctionBinding(new CatalogName(catalogSchemaFunctionName.getCatalogName()), toFunctionBinding(candidate, signature));
                 }
             }
         }
@@ -139,7 +140,7 @@ public class FunctionResolver
         return true;
     }
 
-    FunctionBinding resolveFunction(
+    CatalogFunctionBinding resolveFunction(
             Session session,
             QualifiedFunctionName name,
             List<TypeSignatureProvider> parameterTypes,
@@ -154,7 +155,7 @@ public class FunctionResolver
 
             Optional<FunctionBinding> match = matchFunctionExact(session, exactCandidates, parameterTypes);
             if (match.isPresent()) {
-                return match.get();
+                return new CatalogFunctionBinding(new CatalogName(catalogSchemaFunctionName.getCatalogName()), match.get());
             }
 
             List<FunctionMetadata> genericCandidates = candidates.stream()
@@ -163,12 +164,12 @@ public class FunctionResolver
 
             match = matchFunctionExact(session, genericCandidates, parameterTypes);
             if (match.isPresent()) {
-                return match.get();
+                return new CatalogFunctionBinding(new CatalogName(catalogSchemaFunctionName.getCatalogName()), match.get());
             }
 
             match = matchFunctionWithCoercion(session, candidates, parameterTypes);
             if (match.isPresent()) {
-                return match.get();
+                return new CatalogFunctionBinding(new CatalogName(catalogSchemaFunctionName.getCatalogName()), match.get());
             }
 
             allCandidates.addAll(candidates);
@@ -451,6 +452,28 @@ public class FunctionResolver
                     .add("declaredSignature", function.getSignature())
                     .add("boundSignature", boundSignature)
                     .toString();
+        }
+    }
+
+    static class CatalogFunctionBinding
+    {
+        private final CatalogName catalog;
+        private final FunctionBinding functionBinding;
+
+        private CatalogFunctionBinding(CatalogName catalog, FunctionBinding functionBinding)
+        {
+            this.catalog = requireNonNull(catalog, "catalog is null");
+            this.functionBinding = requireNonNull(functionBinding, "functionBinding is null");
+        }
+
+        public CatalogName getCatalog()
+        {
+            return catalog;
+        }
+
+        public FunctionBinding getFunctionBinding()
+        {
+            return functionBinding;
         }
     }
 }
