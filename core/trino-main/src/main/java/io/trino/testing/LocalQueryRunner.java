@@ -419,6 +419,7 @@ public class LocalQueryRunner
         this.connectorManager = new ConnectorManager(
                 metadata,
                 catalogManager,
+                functionManager,
                 accessControl,
                 splitManager,
                 pageSourceManager,

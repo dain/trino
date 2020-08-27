@@ -24,6 +24,7 @@ import io.trino.spi.function.FunctionDependencies;
 import io.trino.spi.function.FunctionDependencyDeclaration;
 import io.trino.spi.function.FunctionId;
 import io.trino.spi.function.FunctionMetadata;
+import io.trino.spi.function.FunctionProvider;
 import io.trino.spi.function.InvocationConvention;
 import io.trino.spi.function.OperatorType;
 import io.trino.spi.function.ScalarImplementation;
@@ -53,6 +54,7 @@ import static java.util.Locale.ENGLISH;
 
 @ThreadSafe
 public class GlobalFunctionCatalog
+        implements FunctionProvider
 {
     public static final String GLOBAL_CATALOG = "system";
     public static final String GLOBAL_SCHEMA = "global";
@@ -144,11 +146,13 @@ public class GlobalFunctionCatalog
         return functions.getFunctionBundle(functionId).getAggregationFunctionMetadata(functionId);
     }
 
+    @Override
     public WindowFunctionSupplier getWindowFunctionSupplier(FunctionId functionId, BoundSignature boundSignature, FunctionDependencies functionDependencies)
     {
         return functions.getFunctionBundle(functionId).getWindowFunctionSupplier(functionId, boundSignature, functionDependencies);
     }
 
+    @Override
     public AggregationImplementation getAggregationImplementation(FunctionId functionId, BoundSignature boundSignature, FunctionDependencies functionDependencies)
     {
         return functions.getFunctionBundle(functionId).getAggregationImplementation(functionId, boundSignature, functionDependencies);
@@ -159,6 +163,7 @@ public class GlobalFunctionCatalog
         return functions.getFunctionBundle(functionId).getFunctionDependencies(functionId, boundSignature);
     }
 
+    @Override
     public ScalarImplementation getScalarImplementation(
             FunctionId functionId,
             BoundSignature boundSignature,

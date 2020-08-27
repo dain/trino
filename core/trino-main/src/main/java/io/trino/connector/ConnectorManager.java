@@ -30,6 +30,7 @@ import io.trino.metadata.Catalog;
 import io.trino.metadata.Catalog.SecurityManagement;
 import io.trino.metadata.CatalogManager;
 import io.trino.metadata.ColumnPropertyManager;
+import io.trino.metadata.FunctionManager;
 import io.trino.metadata.HandleResolver;
 import io.trino.metadata.InternalNodeManager;
 import io.trino.metadata.MaterializedViewPropertyManager;
@@ -60,6 +61,7 @@ import io.trino.spi.connector.ConnectorSplitManager;
 import io.trino.spi.connector.SystemTable;
 import io.trino.spi.connector.TableProcedureMetadata;
 import io.trino.spi.eventlistener.EventListener;
+import io.trino.spi.function.FunctionProvider;
 import io.trino.spi.procedure.Procedure;
 import io.trino.spi.ptf.ConnectorTableFunction;
 import io.trino.spi.session.PropertyMetadata;
@@ -103,6 +105,7 @@ public class ConnectorManager
 
     private final Metadata metadata;
     private final CatalogManager catalogManager;
+    private final FunctionManager functionManager;
     private final AccessControlManager accessControlManager;
     private final SplitManager splitManager;
     private final PageSourceManager pageSourceManager;
@@ -144,6 +147,7 @@ public class ConnectorManager
     public ConnectorManager(
             Metadata metadata,
             CatalogManager catalogManager,
+            FunctionManager functionManager,
             AccessControlManager accessControlManager,
             SplitManager splitManager,
             PageSourceManager pageSourceManager,
@@ -173,6 +177,7 @@ public class ConnectorManager
     {
         this.metadata = metadata;
         this.catalogManager = catalogManager;
+        this.functionManager = functionManager;
         this.accessControlManager = accessControlManager;
         this.splitManager = splitManager;
         this.pageSourceManager = pageSourceManager;
@@ -340,6 +345,9 @@ public class ConnectorManager
         tableProceduresRegistry.addTableProcedures(catalogName, tableProcedures);
         tableFunctionRegistry.addTableFunctions(catalogName, connector.getTableFunctions());
 
+        connector.getFunctionProvider()
+                .ifPresent(functionProvider -> functionManager.addFunctionProvider(catalogName, functionProvider));
+
         connector.getAccessControl()
                 .ifPresent(accessControl -> accessControlManager.addCatalogAccessControl(catalogName, accessControl));
 
@@ -376,6 +384,7 @@ public class ConnectorManager
         procedureRegistry.removeProcedures(catalogName);
         tableProceduresRegistry.removeProcedures(catalogName);
         tableFunctionRegistry.removeTableFunctions(catalogName);
+        functionManager.removeFunctionProvider(catalogName);
         accessControlManager.removeCatalogAccessControl(catalogName);
         tablePropertyManager.removeProperties(catalogName);
         materializedViewPropertyManager.removeProperties(catalogName);
@@ -500,6 +509,7 @@ public class ConnectorManager
         private final Connector connector;
         private final Runnable afterShutdown;
         private final Set<SystemTable> systemTables;
+        private final Optional<FunctionProvider> functionProvider;
         private final Set<Procedure> procedures;
         private final Set<TableProcedureMetadata> tableProcedures;
         private final Set<ConnectorTableFunction> connectorTableFunctions;
@@ -526,6 +536,8 @@ public class ConnectorManager
             Set<SystemTable> systemTables = connector.getSystemTables();
             requireNonNull(systemTables, format("Connector '%s' returned a null system tables set", catalogName));
             this.systemTables = ImmutableSet.copyOf(systemTables);
+
+            this.functionProvider = requireNonNull(connector.getFunctionProvider(), format("Connector '%s' returned a null function provider", catalogName));
 
             Set<Procedure> procedures = connector.getProcedures();
             requireNonNull(procedures, format("Connector '%s' returned a null procedures set", catalogName));
@@ -642,6 +654,11 @@ public class ConnectorManager
         public Set<SystemTable> getSystemTables()
         {
             return systemTables;
+        }
+
+        public Optional<FunctionProvider> getFunctionProvider()
+        {
+            return functionProvider;
         }
 
         public Set<Procedure> getProcedures()

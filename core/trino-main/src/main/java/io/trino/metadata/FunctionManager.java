@@ -17,6 +17,7 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.trino.FeaturesConfig;
 import io.trino.collect.cache.NonEvictableCache;
+import io.trino.connector.CatalogName;
 import io.trino.spi.TrinoException;
 import io.trino.spi.block.Block;
 import io.trino.spi.connector.ConnectorSession;
@@ -24,6 +25,7 @@ import io.trino.spi.function.AggregationImplementation;
 import io.trino.spi.function.BoundSignature;
 import io.trino.spi.function.FunctionDependencies;
 import io.trino.spi.function.FunctionId;
+import io.trino.spi.function.FunctionProvider;
 import io.trino.spi.function.InOut;
 import io.trino.spi.function.InvocationConvention;
 import io.trino.spi.function.InvocationConvention.InvocationArgumentConvention;
@@ -39,14 +41,18 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Throwables.throwIfInstanceOf;
 import static com.google.common.primitives.Primitives.wrap;
 import static io.trino.client.NodeVersion.UNKNOWN;
 import static io.trino.collect.cache.CacheUtils.uncheckedCacheGet;
 import static io.trino.collect.cache.SafeCaches.buildNonEvictableCache;
+import static io.trino.metadata.GlobalFunctionCatalog.GLOBAL_CATALOG;
 import static io.trino.spi.StandardErrorCode.FUNCTION_IMPLEMENTATION_ERROR;
 import static io.trino.type.InternalTypeManager.TESTING_TYPE_MANAGER;
 import static java.lang.String.format;
@@ -59,7 +65,7 @@ public class FunctionManager
     private final NonEvictableCache<FunctionKey, AggregationImplementation> specializedAggregationCache;
     private final NonEvictableCache<FunctionKey, WindowFunctionSupplier> specializedWindowCache;
 
-    private final GlobalFunctionCatalog globalFunctionCatalog;
+    private final ConcurrentMap<CatalogName, FunctionProvider> functionProviders = new ConcurrentHashMap<>();
 
     @Inject
     public FunctionManager(GlobalFunctionCatalog globalFunctionCatalog)
@@ -76,7 +82,19 @@ public class FunctionManager
                 .maximumSize(1000)
                 .expireAfterWrite(1, HOURS));
 
-        this.globalFunctionCatalog = globalFunctionCatalog;
+        functionProviders.put(new CatalogName(GLOBAL_CATALOG), globalFunctionCatalog);
+    }
+
+    public void addFunctionProvider(CatalogName catalogName, FunctionProvider functionProvider)
+    {
+        requireNonNull(catalogName, "catalogName is null");
+        requireNonNull(functionProvider, "functionProvider is null");
+        checkState(functionProviders.putIfAbsent(catalogName, functionProvider) == null, "Function provider already registered for catalog: %s", catalogName);
+    }
+
+    public void removeFunctionProvider(CatalogName catalogName)
+    {
+        functionProviders.remove(requireNonNull(catalogName, "catalogName is null"));
     }
 
     public ScalarImplementation getScalarImplementation(ResolvedFunction resolvedFunction, InvocationConvention invocationConvention)
@@ -93,7 +111,7 @@ public class FunctionManager
     private ScalarImplementation getScalarImplementationInternal(ResolvedFunction resolvedFunction, InvocationConvention invocationConvention)
     {
         FunctionDependencies functionDependencies = getFunctionDependencies(resolvedFunction);
-        ScalarImplementation scalarImplementation = globalFunctionCatalog.getScalarImplementation(
+        ScalarImplementation scalarImplementation = getFunctionProvider(resolvedFunction).getScalarImplementation(
                 resolvedFunction.getFunctionId(),
                 resolvedFunction.getSignature(),
                 functionDependencies,
@@ -116,7 +134,7 @@ public class FunctionManager
     private AggregationImplementation getAggregationImplementationInternal(ResolvedFunction resolvedFunction)
     {
         FunctionDependencies functionDependencies = getFunctionDependencies(resolvedFunction);
-        return globalFunctionCatalog.getAggregationImplementation(
+        return getFunctionProvider(resolvedFunction).getAggregationImplementation(
                 resolvedFunction.getFunctionId(),
                 resolvedFunction.getSignature(),
                 functionDependencies);
@@ -136,7 +154,7 @@ public class FunctionManager
     private WindowFunctionSupplier getWindowFunctionSupplierInternal(ResolvedFunction resolvedFunction)
     {
         FunctionDependencies functionDependencies = getFunctionDependencies(resolvedFunction);
-        return globalFunctionCatalog.getWindowFunctionSupplier(
+        return getFunctionProvider(resolvedFunction).getWindowFunctionSupplier(
                 resolvedFunction.getFunctionId(),
                 resolvedFunction.getSignature(),
                 functionDependencies);
@@ -145,6 +163,13 @@ public class FunctionManager
     private FunctionDependencies getFunctionDependencies(ResolvedFunction resolvedFunction)
     {
         return new InternalFunctionDependencies(this::getScalarImplementation, resolvedFunction.getTypeDependencies(), resolvedFunction.getFunctionDependencies());
+    }
+
+    private FunctionProvider getFunctionProvider(ResolvedFunction resolvedFunction)
+    {
+        FunctionProvider functionProvider = functionProviders.get(resolvedFunction.getCatalog());
+        checkArgument(functionProvider != null, "No function provider for catalog: '%s' (function '%s')", resolvedFunction.getCatalog(), resolvedFunction.getSignature().getName());
+        return functionProvider;
     }
 
     private static void verifyMethodHandleSignature(BoundSignature boundSignature, ScalarImplementation scalarImplementation, InvocationConvention convention)

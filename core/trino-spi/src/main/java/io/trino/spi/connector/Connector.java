@@ -14,12 +14,14 @@
 package io.trino.spi.connector;
 
 import io.trino.spi.eventlistener.EventListener;
+import io.trino.spi.function.FunctionProvider;
 import io.trino.spi.procedure.Procedure;
 import io.trino.spi.ptf.ConnectorTableFunction;
 import io.trino.spi.session.PropertyMetadata;
 import io.trino.spi.transaction.IsolationLevel;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static java.util.Collections.emptyList;
@@ -131,6 +133,14 @@ public interface Connector
     default Set<SystemTable> getSystemTables()
     {
         return emptySet();
+    }
+
+    /**
+     * @return the set of procedures provided by this connector
+     */
+    default Optional<FunctionProvider> getFunctionProvider()
+    {
+        return Optional.empty();
     }
 
     /**
