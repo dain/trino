@@ -6,25 +6,25 @@
     ],
     "impersonation": [
         {
-            "originalUser": "alice",
+            "original_user": "alice",
             "newUser": "bob|charlie"
         },
         {
-            "originalUser": "admin-test",
+            "original_user": "admin-test",
             "newUser": ".*",
             "allow": false
         },
         {
-            "originalUser": "admin(-.*)?",
+            "original_user": "admin(-.*)?",
             "newUser": ".*"
         },
         {
-            "originalUser": "invalid(-.*)?",
+            "original_user": "invalid(-.*)?",
             "newUser": ".*",
             "allow": false
         },
         {
-            "originalUser": ".*",
+            "original_user": ".*",
             "newUser": "test"
         }
     ]

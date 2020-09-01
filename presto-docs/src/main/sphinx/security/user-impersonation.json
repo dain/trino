@@ -6,21 +6,21 @@
     ],
     "impersonation": [
         {
-            "originalUser": "alice",
+            "original_user": "alice",
             "newUser": "bob",
             "allow": false
         },
         {
-            "originalUser": "bob",
+            "original_user": "bob",
             "newUser": "alice",
             "allow": false
         },
         {
-            "originalUser": "alice|bob",
+            "original_user": "alice|bob",
             "newUser": ".*"
         },
         {
-            "originalUser": ".*",
+            "original_user": ".*",
             "newUser": "test"
         }
     ]

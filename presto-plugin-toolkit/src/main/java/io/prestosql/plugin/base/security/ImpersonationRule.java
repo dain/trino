@@ -13,6 +13,7 @@
  */
 package io.prestosql.plugin.base.security;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -32,7 +33,7 @@ public class ImpersonationRule
 
     @JsonCreator
     public ImpersonationRule(
-            @JsonProperty("originalUser") Pattern originalUserPattern,
+            @JsonProperty("original_user") @JsonAlias("originalUser") Pattern originalUserPattern,
             @JsonProperty("newUser") Pattern newUserPattern,
             @JsonProperty("allow") Boolean allow)
     {
