@@ -438,7 +438,9 @@ public class FileBasedSystemAccessControl
     @Override
     public void checkCanCreateTable(SystemSecurityContext context, CatalogSchemaTableName table)
     {
-        if (!canAccessCatalog(context.getIdentity(), table.getCatalogName(), ALL)) {
+        // check if user owns the schema and will be an owner of the table after creation
+        if (!isSchemaOwner(context, new CatalogSchemaName(table.getCatalogName(), table.getSchemaTableName().getSchemaName())) ||
+                !checkTablePermission(context, table, OWNERSHIP)) {
             denyCreateTable(table.toString());
         }
     }
@@ -454,7 +456,10 @@ public class FileBasedSystemAccessControl
     @Override
     public void checkCanRenameTable(SystemSecurityContext context, CatalogSchemaTableName table, CatalogSchemaTableName newTable)
     {
-        if (!checkTablePermission(context, table, OWNERSHIP) || !checkTablePermission(context, newTable, OWNERSHIP)) {
+        // check if user will be an owner current table and will be an owner of the renamed table
+        if (!checkTablePermission(context, table, OWNERSHIP) ||
+                !isSchemaOwner(context, new CatalogSchemaName(newTable.getCatalogName(), newTable.getSchemaTableName().getSchemaName())) ||
+                !checkTablePermission(context, newTable, OWNERSHIP)) {
             denyRenameTable(table.toString(), newTable.toString());
         }
     }
@@ -559,7 +564,9 @@ public class FileBasedSystemAccessControl
     @Override
     public void checkCanCreateView(SystemSecurityContext context, CatalogSchemaTableName view)
     {
-        if (!canAccessCatalog(context.getIdentity(), view.getCatalogName(), ALL)) {
+        // check if user owns the schema and will be an owner of the view after creation
+        if (!isSchemaOwner(context, new CatalogSchemaName(view.getCatalogName(), view.getSchemaTableName().getSchemaName())) ||
+                !checkTablePermission(context, view, OWNERSHIP)) {
             denyCreateView(view.toString());
         }
     }
@@ -567,7 +574,10 @@ public class FileBasedSystemAccessControl
     @Override
     public void checkCanRenameView(SystemSecurityContext context, CatalogSchemaTableName view, CatalogSchemaTableName newView)
     {
-        if (!canAccessCatalog(context.getIdentity(), view.getCatalogName(), ALL)) {
+        // check if user owns the existing view, and if they own the new schema and will be an owner of the view after the rename
+        if (!checkTablePermission(context, view, OWNERSHIP) ||
+                !isSchemaOwner(context, new CatalogSchemaName(newView.getCatalogName(), newView.getSchemaTableName().getSchemaName())) ||
+                !checkTablePermission(context, newView, OWNERSHIP)) {
             denyRenameView(view.toString(), newView.toString());
         }
     }

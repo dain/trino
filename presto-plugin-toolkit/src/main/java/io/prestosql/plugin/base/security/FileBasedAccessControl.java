@@ -147,7 +147,8 @@ public class FileBasedAccessControl
     @Override
     public void checkCanCreateTable(ConnectorSecurityContext context, SchemaTableName tableName)
     {
-        if (!isSchemaOwner(context, tableName.getSchemaName())) {
+        // check if user owns the schema and will be an owner of the table after creation
+        if (!isSchemaOwner(context, tableName.getSchemaName()) || !checkTablePermission(context, tableName, OWNERSHIP)) {
             denyCreateTable(tableName.toString());
         }
     }
@@ -191,7 +192,10 @@ public class FileBasedAccessControl
     @Override
     public void checkCanRenameTable(ConnectorSecurityContext context, SchemaTableName tableName, SchemaTableName newTableName)
     {
-        if (!checkTablePermission(context, tableName, OWNERSHIP) || !checkTablePermission(context, newTableName, OWNERSHIP)) {
+        // check if user owns the existing table, and if they own the new schema and will be an owner of the table after the rename
+        if (!checkTablePermission(context, tableName, OWNERSHIP) ||
+                !isSchemaOwner(context, newTableName.getSchemaName()) ||
+                !checkTablePermission(context, newTableName, OWNERSHIP)) {
             denyRenameTable(tableName.toString(), newTableName.toString());
         }
     }
@@ -264,7 +268,8 @@ public class FileBasedAccessControl
     @Override
     public void checkCanCreateView(ConnectorSecurityContext context, SchemaTableName viewName)
     {
-        if (!isSchemaOwner(context, viewName.getSchemaName())) {
+        // check if user owns the schema and will be an owner of the view after creation
+        if (!isSchemaOwner(context, viewName.getSchemaName()) || !checkTablePermission(context, viewName, OWNERSHIP)) {
             denyCreateView(viewName.toString());
         }
     }
@@ -272,7 +277,10 @@ public class FileBasedAccessControl
     @Override
     public void checkCanRenameView(ConnectorSecurityContext context, SchemaTableName viewName, SchemaTableName newViewName)
     {
-        if (!checkTablePermission(context, viewName, OWNERSHIP) || !checkTablePermission(context, newViewName, OWNERSHIP)) {
+        // check if user owns the existing view, and if they own the new schema and will be an owner of the view after the rename
+        if (!checkTablePermission(context, viewName, OWNERSHIP) ||
+                !isSchemaOwner(context, newViewName.getSchemaName()) ||
+                !checkTablePermission(context, newViewName, OWNERSHIP)) {
             denyRenameView(viewName.toString(), newViewName.toString());
         }
     }
