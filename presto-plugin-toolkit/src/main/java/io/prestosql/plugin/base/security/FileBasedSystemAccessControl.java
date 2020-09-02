@@ -475,7 +475,7 @@ public class FileBasedSystemAccessControl
     @Override
     public void checkCanSetColumnComment(SystemSecurityContext context, CatalogSchemaTableName table)
     {
-        if (!canAccessCatalog(context.getIdentity(), table.getCatalogName(), ALL)) {
+        if (!checkTablePermission(context, table, OWNERSHIP)) {
             denyCommentColumn(table.toString());
         }
     }
@@ -585,7 +585,7 @@ public class FileBasedSystemAccessControl
     @Override
     public void checkCanDropView(SystemSecurityContext context, CatalogSchemaTableName view)
     {
-        if (!canAccessCatalog(context.getIdentity(), view.getCatalogName(), ALL)) {
+        if (!checkTablePermission(context, view, OWNERSHIP)) {
             denyDropView(view.toString());
         }
     }
@@ -593,7 +593,11 @@ public class FileBasedSystemAccessControl
     @Override
     public void checkCanCreateViewWithSelectFromColumns(SystemSecurityContext context, CatalogSchemaTableName table, Set<String> columns)
     {
-        if (!canAccessCatalog(context.getIdentity(), table.getCatalogName(), ALL)) {
+        // TODO: implement column level permissions
+        if (!checkTablePermission(context, table, SELECT)) {
+            denySelectTable(table.toString());
+        }
+        if (!checkTablePermission(context, table, GRANT_SELECT)) {
             denyCreateViewWithSelect(table.toString(), context.getIdentity());
         }
     }
