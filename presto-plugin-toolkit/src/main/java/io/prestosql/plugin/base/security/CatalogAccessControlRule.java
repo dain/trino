@@ -64,6 +64,17 @@ public class CatalogAccessControlRule
         return Optional.empty();
     }
 
+    public Optional<AnyCatalogPermissionsRule> toAnyCatalogPermissionsRule()
+    {
+        if (accessMode == AccessMode.NONE) {
+            return Optional.empty();
+        }
+        return Optional.of(new AnyCatalogPermissionsRule(
+                userRegex,
+                groupRegex,
+                catalogRegex));
+    }
+
     public enum AccessMode
     {
         ALL("all"),
