@@ -72,4 +72,16 @@ public class CatalogTableAccessControlRule
                 tableAccessControlRule.getGroupRegex(),
                 catalogRegex));
     }
+
+    public Optional<AnyCatalogSchemaPermissionsRule> toAnyCatalogSchemaPermissionsRule()
+    {
+        if (tableAccessControlRule.getPrivileges().isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(new AnyCatalogSchemaPermissionsRule(
+                tableAccessControlRule.getUserRegex(),
+                tableAccessControlRule.getGroupRegex(),
+                catalogRegex,
+                tableAccessControlRule.getSchemaRegex()));
+    }
 }

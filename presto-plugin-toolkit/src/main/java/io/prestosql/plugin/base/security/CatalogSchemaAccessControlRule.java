@@ -71,4 +71,16 @@ public class CatalogSchemaAccessControlRule
                 schemaAccessControlRule.getGroupRegex(),
                 catalogRegex));
     }
+
+    public Optional<AnyCatalogSchemaPermissionsRule> toAnyCatalogSchemaPermissionsRule()
+    {
+        if (!schemaAccessControlRule.isOwner()) {
+            return Optional.empty();
+        }
+        return Optional.of(new AnyCatalogSchemaPermissionsRule(
+                schemaAccessControlRule.getUserRegex(),
+                schemaAccessControlRule.getGroupRegex(),
+                catalogRegex,
+                schemaAccessControlRule.getSchemaRegex()));
+    }
 }
