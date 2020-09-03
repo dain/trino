@@ -28,6 +28,13 @@ import static java.util.Objects.requireNonNull;
 
 public class CatalogTableAccessControlRule
 {
+    public static final CatalogTableAccessControlRule ALLOW_ALL;
+
+    static {
+        ALLOW_ALL = new CatalogTableAccessControlRule(Optional.empty());
+        ALLOW_ALL.setTableAccessControlRule(TableAccessControlRule.ALLOW_ALL);
+    }
+
     private final Optional<Pattern> catalogRegex;
     private TableAccessControlRule tableAccessControlRule;
 

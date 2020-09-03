@@ -27,6 +27,13 @@ import static java.util.Objects.requireNonNull;
 
 public class CatalogSchemaAccessControlRule
 {
+    public static final CatalogSchemaAccessControlRule ALLOW_ALL;
+
+    static {
+        ALLOW_ALL = new CatalogSchemaAccessControlRule(Optional.empty());
+        ALLOW_ALL.setSchemaAccessControlRule(SchemaAccessControlRule.ALLOW_ALL);
+    }
+
     private final Optional<Pattern> catalogRegex;
     private SchemaAccessControlRule schemaAccessControlRule;
 
