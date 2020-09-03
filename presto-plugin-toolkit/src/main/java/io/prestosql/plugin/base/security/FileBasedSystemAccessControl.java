@@ -350,7 +350,7 @@ public class FileBasedSystemAccessControl
     @Override
     public void checkCanAccessCatalog(SystemSecurityContext context, String catalogName)
     {
-        if (!canAccessCatalog(context.getIdentity(), catalogName, READ_ONLY)) {
+        if (!canAccessCatalog(context, catalogName, READ_ONLY)) {
             denyCatalogAccess(catalogName);
         }
     }
@@ -360,22 +360,11 @@ public class FileBasedSystemAccessControl
     {
         ImmutableSet.Builder<String> filteredCatalogs = ImmutableSet.builder();
         for (String catalog : catalogs) {
-            if (canAccessCatalog(context.getIdentity(), catalog, READ_ONLY)) {
+            if (canAccessCatalog(context, catalog, READ_ONLY)) {
                 filteredCatalogs.add(catalog);
             }
         }
         return filteredCatalogs.build();
-    }
-
-    private boolean canAccessCatalog(Identity identity, String catalogName, AccessMode requiredAccess)
-    {
-        for (CatalogAccessControlRule rule : catalogRules) {
-            Optional<AccessMode> accessMode = rule.match(identity.getUser(), identity.getGroups(), catalogName);
-            if (accessMode.isPresent()) {
-                return accessMode.get().implies(requiredAccess);
-            }
-        }
-        return false;
     }
 
     @Override
@@ -418,7 +407,7 @@ public class FileBasedSystemAccessControl
     @Override
     public Set<String> filterSchemas(SystemSecurityContext context, String catalogName, Set<String> schemaNames)
     {
-        if (!canAccessCatalog(context.getIdentity(), catalogName, READ_ONLY)) {
+        if (!canAccessCatalog(context, catalogName, READ_ONLY)) {
             return ImmutableSet.of();
         }
 
@@ -666,9 +655,21 @@ public class FileBasedSystemAccessControl
         return Optional.empty();
     }
 
+    private boolean canAccessCatalog(SystemSecurityContext context, String catalogName, AccessMode requiredAccess)
+    {
+        Identity identity = context.getIdentity();
+        for (CatalogAccessControlRule rule : catalogRules) {
+            Optional<AccessMode> accessMode = rule.match(identity.getUser(), identity.getGroups(), catalogName);
+            if (accessMode.isPresent()) {
+                return accessMode.get().implies(requiredAccess);
+            }
+        }
+        return false;
+    }
+
     private boolean isSchemaOwner(SystemSecurityContext context, CatalogSchemaName schema)
     {
-        if (!canAccessCatalog(context.getIdentity(), schema.getCatalogName(), ALL)) {
+        if (!canAccessCatalog(context, schema.getCatalogName(), ALL)) {
             return false;
         }
 
@@ -699,7 +700,7 @@ public class FileBasedSystemAccessControl
             AccessMode requiredCatalogAccess,
             Predicate<Set<TablePrivilege>> checkPrivileges)
     {
-        if (!canAccessCatalog(context.getIdentity(), table.getCatalogName(), requiredCatalogAccess)) {
+        if (!canAccessCatalog(context, table.getCatalogName(), requiredCatalogAccess)) {
             return false;
         }
 
