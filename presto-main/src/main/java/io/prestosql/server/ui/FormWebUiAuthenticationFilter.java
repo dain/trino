@@ -58,7 +58,7 @@ public class FormWebUiAuthenticationFilter
     static final String DISABLED_LOCATION = "/ui/disabled.html";
     static final URI DISABLED_LOCATION_URI = URI.create(DISABLED_LOCATION);
     public static final String UI_LOCATION = "/ui/";
-    private static final URI UI_LOCATION_URI = URI.create(UI_LOCATION);
+    static final URI UI_LOCATION_URI = URI.create(UI_LOCATION);
     static final String UI_LOGIN = "/ui/login";
     static final String UI_LOGOUT = "/ui/logout";
 

@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 
 public class OAuth2Config
 {
+    private Optional<String> stateKey = Optional.empty();
     private String serverUrl;
     private String authUrl;
     private String tokenUrl;
@@ -36,6 +37,19 @@ public class OAuth2Config
     private Duration challengeTimeout = new Duration(15, TimeUnit.MINUTES);
     private Optional<String> userMappingPattern = Optional.empty();
     private Optional<File> userMappingFile = Optional.empty();
+
+    @NotNull
+    public Optional<String> getStateKey()
+    {
+        return stateKey;
+    }
+
+    @Config("http-server.authentication.oauth2.state-key")
+    public OAuth2Config setStateKey(String stateKey)
+    {
+        this.stateKey = Optional.ofNullable(stateKey);
+        return this;
+    }
 
     @NotNull
     public String getServerUrl()

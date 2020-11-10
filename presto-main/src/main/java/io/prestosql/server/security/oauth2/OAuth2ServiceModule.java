@@ -13,40 +13,57 @@
  */
 package io.prestosql.server.security.oauth2;
 
-import com.github.scribejava.core.oauth2.OAuth2Error;
 import com.google.inject.Binder;
+import com.google.inject.Provides;
 import com.google.inject.Scopes;
 import io.airlift.configuration.AbstractConfigurationAwareModule;
-import io.prestosql.server.ui.WebUiAuthenticationFilter;
+import io.airlift.http.client.HttpClient;
+import io.airlift.units.Duration;
+import io.jsonwebtoken.SigningKeyResolver;
+import io.prestosql.server.security.jwt.JwkService;
+import io.prestosql.server.security.jwt.JwkSigningKeyResolver;
 
+import java.net.URI;
+import java.util.concurrent.TimeUnit;
+
+import static com.google.inject.multibindings.OptionalBinder.newOptionalBinder;
 import static io.airlift.configuration.ConfigBinder.configBinder;
 import static io.airlift.http.client.HttpClientBinder.httpClientBinder;
 import static io.airlift.jaxrs.JaxrsBinder.jaxrsBinder;
-import static io.airlift.json.JsonCodecBinder.jsonCodecBinder;
 
-public class OAuth2AuthenticatorModule
+public class OAuth2ServiceModule
         extends AbstractConfigurationAwareModule
 {
     @Override
     protected void setup(Binder binder)
     {
+        jaxrsBinder(binder).bind(OAuth2CallbackResource.class);
+
         configBinder(binder).bindConfig(OAuth2Config.class);
         binder.bind(OAuth2Service.class).in(Scopes.SINGLETON);
-        jaxrsBinder(binder).bind(OAuth2Resource.class);
-        jsonCodecBinder(binder).bindJsonCodec(OAuth2Error.class);
-        binder.bind(WebUiAuthenticationFilter.class).to(OAuth2WebUiAuthenticationFilter.class).in(Scopes.SINGLETON);
+        newOptionalBinder(binder, OAuth2Client.class)
+                .setDefault()
+                .to(ScribeJavaOAuth2Client.class)
+                .in(Scopes.SINGLETON);
         httpClientBinder(binder).bindHttpClient("oauth2-jwk", ForOAuth2.class);
+    }
+
+    @Provides
+    @ForOAuth2
+    public static SigningKeyResolver createSigningKeyResolver(OAuth2Config oauth2Config, @ForOAuth2 HttpClient httpClient)
+    {
+        return new JwkSigningKeyResolver(new JwkService(URI.create(oauth2Config.getJwksUrl()), httpClient, new Duration(15, TimeUnit.MINUTES)));
     }
 
     @Override
     public int hashCode()
     {
-        return OAuth2AuthenticatorModule.class.hashCode();
+        return OAuth2ServiceModule.class.hashCode();
     }
 
     @Override
     public boolean equals(Object obj)
     {
-        return obj instanceof OAuth2AuthenticatorModule;
+        return obj instanceof OAuth2ServiceModule;
     }
 }

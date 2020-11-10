@@ -24,6 +24,9 @@ import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.impl.DefaultClaims;
+import io.prestosql.server.security.jwt.JwkService;
+import io.prestosql.server.security.jwt.JwkSigningKeyResolver;
+import io.prestosql.server.security.jwt.JwtAuthenticatorConfig;
 import io.prestosql.server.testing.TestingPrestoServer;
 import io.prestosql.server.ui.WebUiModule;
 import okhttp3.HttpUrl;
@@ -321,9 +324,9 @@ public class TestOAuth2WebUiAuthenticationFilter
         assertThat(cookie.isHttpOnly()).isTrue();
         assertThat(cookie.getValue()).isNotBlank();
         Jws<Claims> jwt = Jwts.parser()
-                .setSigningKeyResolver(new JWKSSigningKeyResolver(
-                        URI.create("http://localhost:" + testingHydraService.getHydraPort() + "/.well-known/jwks.json"),
-                        new JettyHttpClient()))
+                .setSigningKeyResolver(new JwkSigningKeyResolver(new JwkService(
+                        new JwtAuthenticatorConfig().setKeyFile("http://localhost:" + testingHydraService.getHydraPort() + "/.well-known/jwks.json"),
+                        new JettyHttpClient())))
                 .parseClaimsJws(cookie.getValue());
         // TODO: check source of the difference
         //        assertThat(cookie.getExpiry()).isEqualTo(jwt.getBody().getExpiration());

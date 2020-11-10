@@ -32,6 +32,7 @@ public class TestOAuth2Config
     public void testDefaults()
     {
         assertRecordedDefaults(recordDefaults(OAuth2Config.class)
+                .setStateKey(null)
                 .setServerUrl(null)
                 .setAuthUrl(null)
                 .setTokenUrl(null)
@@ -49,6 +50,7 @@ public class TestOAuth2Config
     {
         Path userMappingFile = Files.createTempFile(null, null);
         Map<String, String> properties = new ImmutableMap.Builder<String, String>()
+                .put("http-server.authentication.oauth2.state-key", "key-secret")
                 .put("http-server.authentication.oauth2.server-url", "http://127.0.0.1:9000")
                 .put("http-server.authentication.oauth2.auth-url", "http://127.0.0.1:9000/oauth2/auth")
                 .put("http-server.authentication.oauth2.token-url", "http://127.0.0.1:9000/oauth2/token")
@@ -61,6 +63,7 @@ public class TestOAuth2Config
                 .build();
 
         OAuth2Config expected = new OAuth2Config()
+                .setStateKey("key-secret")
                 .setServerUrl("http://127.0.0.1:9000")
                 .setAuthUrl("http://127.0.0.1:9000/oauth2/auth")
                 .setTokenUrl("http://127.0.0.1:9000/oauth2/token")

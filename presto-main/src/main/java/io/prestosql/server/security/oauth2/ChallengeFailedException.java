@@ -13,20 +13,16 @@
  */
 package io.prestosql.server.security.oauth2;
 
-import static java.util.Objects.requireNonNull;
-
-class ChallengeNotFoundException
-        extends RuntimeException
+public class ChallengeFailedException
+        extends Exception
 {
-    private final State state;
-
-    ChallengeNotFoundException(State state)
+    public ChallengeFailedException(String message)
     {
-        this.state = requireNonNull(state, "state is null");
+        super(message);
     }
 
-    State getState()
+    public ChallengeFailedException(String message, Throwable cause)
     {
-        return state;
+        super(message, cause);
     }
 }
