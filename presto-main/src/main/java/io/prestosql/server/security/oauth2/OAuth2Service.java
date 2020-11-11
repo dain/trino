@@ -32,6 +32,8 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.util.Date;
+import java.util.Optional;
+import java.util.UUID;
 
 import static com.google.common.base.Strings.nullToEmpty;
 import static com.google.common.base.Verify.verify;
@@ -40,7 +42,8 @@ import static java.util.Objects.requireNonNull;
 
 public class OAuth2Service
 {
-    private static final String STATE_AUDIENCE = "presto_oauth";
+    private static final String STATE_AUDIENCE_UI = "presto_oauth_ui";
+    private static final String STATE_AUDIENCE_REST = "presto_oauth_rest";
     private static final String FAILURE_REPLACEMENT_TEXT = "<!-- ERROR_MESSAGE -->";
 
     private final OAuth2Client client;
@@ -74,11 +77,24 @@ public class OAuth2Service
         }
     }
 
-    public URI startChallenge(URI callbackUri)
+    public URI startWebUiChallenge(URI callbackUri)
     {
         String state = Jwts.builder()
                 .signWith(SignatureAlgorithm.HS256, stateHmac)
-                .setAudience(STATE_AUDIENCE)
+                .setAudience(STATE_AUDIENCE_UI)
+                .setExpiration(new Date(System.currentTimeMillis() + challengeTimeoutMillis))
+                .setExpiration(Date.from(ZonedDateTime.now().plusMinutes(5).toInstant()))
+                .compact();
+
+        return client.getAuthorizationUri(state, callbackUri);
+    }
+
+    public URI startRestChallenge(URI callbackUri, UUID authId)
+    {
+        String state = Jwts.builder()
+                .signWith(SignatureAlgorithm.HS256, stateHmac)
+                .setAudience(STATE_AUDIENCE_REST)
+                .setId(authId.toString())
                 .setExpiration(new Date(System.currentTimeMillis() + challengeTimeoutMillis))
                 .setExpiration(Date.from(ZonedDateTime.now().plusMinutes(5).toInstant()))
                 .compact();
@@ -94,7 +110,19 @@ public class OAuth2Service
         requireNonNull(code, "code is null");
 
         Claims stateClaims = parseState(state);
-        if (!STATE_AUDIENCE.equals(stateClaims.getAudience())) {
+        Optional<UUID> authId;
+        if (STATE_AUDIENCE_UI.equals(stateClaims.getAudience())) {
+            authId = Optional.empty();
+        }
+        else if (STATE_AUDIENCE_REST.equals(stateClaims.getAudience())) {
+            try {
+                authId = Optional.of(UUID.fromString(stateClaims.getId()));
+            }
+            catch (RuntimeException e) {
+                throw new ChallengeFailedException("State is does not contain an auth id");
+            }
+        }
+        else {
             // this is very unlikely, but is a good safety check
             throw new ChallengeFailedException("Unexpected state audience");
         }
@@ -110,7 +138,7 @@ public class OAuth2Service
                 .map(instant -> Ordering.natural().min(instant, parsedToken.getExpiration().toInstant()))
                 .orElse(parsedToken.getExpiration().toInstant());
 
-        return new OAuthResult(accessToken.getAccessToken(), validUntil);
+        return new OAuthResult(authId, accessToken.getAccessToken(), validUntil);
     }
 
     private Claims parseState(String state)
@@ -166,13 +194,24 @@ public class OAuth2Service
 
     public static class OAuthResult
     {
+        private final Optional<UUID> authId;
         private final String accessToken;
         private final Instant tokenExpiration;
 
-        public OAuthResult(String accessToken, Instant tokenExpiration)
+        public OAuthResult(Optional<UUID> authId, String accessToken, Instant tokenExpiration)
         {
+            this.authId = requireNonNull(authId, "authId is null");
             this.accessToken = requireNonNull(accessToken, "accessToken is null");
             this.tokenExpiration = requireNonNull(tokenExpiration, "tokenExpiration is null");
+        }
+
+        /**
+         * Get authId if for rest client request.  This will be empty if the authentication request is
+         * a web ui login.
+         */
+        public Optional<UUID> getAuthId()
+        {
+            return authId;
         }
 
         public String getAccessToken()

@@ -514,7 +514,7 @@ public class TestWebUi
 
         String state = Jwts.builder()
                 .signWith(SignatureAlgorithm.HS256, Hashing.sha256().hashString("test-state-key", UTF_8).asBytes())
-                .setAudience("presto_oauth")
+                .setAudience("presto_oauth_ui")
                 .setExpiration(Date.from(ZonedDateTime.now().plusMinutes(10).toInstant()))
                 .compact();
 
@@ -531,7 +531,7 @@ public class TestWebUi
         try (TestingPrestoServer server = TestingPrestoServer.builder()
                 .setProperties(ImmutableMap.<String, String>builder()
                         .putAll(SECURE_PROPERTIES)
-                        .put("web-ui.authentication.type", "oauth2")
+                        .put("http-server.authentication.type", "oauth2")
                         .put("http-server.authentication.oauth2.jwks-url", jwkServer.getBaseUrl().toString())
                         .put("http-server.authentication.oauth2.state-key", "test-state-key")
                         .put("http-server.authentication.oauth2.server-url", "http://example.com/")
