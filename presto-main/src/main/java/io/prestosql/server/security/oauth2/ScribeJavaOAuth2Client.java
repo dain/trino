@@ -20,6 +20,7 @@ import com.github.scribejava.core.model.OAuthRequest;
 import com.github.scribejava.core.oauth.AccessTokenRequestParams;
 import com.github.scribejava.core.oauth.OAuth20Service;
 import com.google.common.collect.ImmutableMap;
+import io.airlift.http.client.HttpClient;
 
 import javax.inject.Inject;
 
@@ -35,9 +36,9 @@ public class ScribeJavaOAuth2Client
     private final DynamicCallbackOAuth2Service service;
 
     @Inject
-    public ScribeJavaOAuth2Client(OAuth2Config config)
+    public ScribeJavaOAuth2Client(@ForOAuth2 HttpClient client, OAuth2Config config)
     {
-        service = new DynamicCallbackOAuth2Service(config);
+        service = new DynamicCallbackOAuth2Service(client, config);
     }
 
     @Override
@@ -63,7 +64,7 @@ public class ScribeJavaOAuth2Client
     private static class DynamicCallbackOAuth2Service
             extends OAuth20Service
     {
-        public DynamicCallbackOAuth2Service(OAuth2Config config)
+        public DynamicCallbackOAuth2Service(HttpClient client, OAuth2Config config)
         {
             super(
                     new OAuth2Api(config.getTokenUrl(), config.getAuthUrl()),
@@ -75,7 +76,7 @@ public class ScribeJavaOAuth2Client
                     null,
                     null,
                     null,
-                    null);
+                    new AirliftScribeJavaHttpClient(client));
         }
 
         public OAuth2AccessToken getAccessToken(String code, String callbackUrl)
