@@ -30,7 +30,7 @@ import io.trino.plugin.jdbc.JdbcStatisticsConfig;
 import io.trino.plugin.jdbc.MaxDomainCompactionThreshold;
 import io.trino.plugin.jdbc.credential.CredentialProvider;
 import io.trino.plugin.jdbc.ptf.Query;
-import io.trino.spi.ptf.ConnectorTableFunction;
+import io.trino.plugin.jdbc.ptf.TableFunction;
 
 import static com.google.inject.multibindings.Multibinder.newSetBinder;
 import static com.google.inject.multibindings.OptionalBinder.newOptionalBinder;
@@ -51,7 +51,7 @@ public class SqlServerClientModule
         bindTablePropertiesProvider(binder, SqlServerTableProperties.class);
         bindSessionPropertiesProvider(binder, SqlServerSessionProperties.class);
         newOptionalBinder(binder, Key.get(int.class, MaxDomainCompactionThreshold.class)).setBinding().toInstance(SQL_SERVER_MAX_LIST_EXPRESSIONS);
-        newSetBinder(binder, ConnectorTableFunction.class).addBinding().toProvider(Query.class).in(Scopes.SINGLETON);
+        newSetBinder(binder, TableFunction.class).addBinding().toProvider(Query.class).in(Scopes.SINGLETON);
         install(new JdbcJoinPushdownSupportModule());
     }
 

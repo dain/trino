@@ -19,6 +19,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ListMultimap;
 import io.trino.Session;
+import io.trino.connector.CatalogName;
+import io.trino.metadata.CatalogSchemaFunctionName;
 import io.trino.metadata.TableFunctionHandle;
 import io.trino.metadata.TableHandle;
 import io.trino.spi.connector.ColumnHandle;
@@ -348,15 +350,16 @@ class RelationPlanner
                 .map(symbolAllocator::newSymbol)
                 .collect(toImmutableList());
 
+        CatalogSchemaFunctionName functionName = functionAnalysis.getFunctionName();
         PlanNode root = new TableFunctionNode(
                 idAllocator.getNextId(),
-                functionAnalysis.getFunctionName(),
+                functionName.getSchemaFunctionName().getFunctionName(),
                 functionAnalysis.getArguments(),
                 outputSymbols,
                 sources.stream().map(RelationPlan::getRoot).collect(toImmutableList()),
                 inputRelationsProperties,
                 inputDescriptorMappings,
-                new TableFunctionHandle(functionAnalysis.getCatalogName(), functionAnalysis.getConnectorTableFunctionHandle(), functionAnalysis.getTransactionHandle()));
+                new TableFunctionHandle(new CatalogName(functionName.getCatalogName()), functionAnalysis.getConnectorTableFunctionHandle(), functionAnalysis.getTransactionHandle()));
 
         return new RelationPlan(root, scope, outputSymbols, outerContext);
     }

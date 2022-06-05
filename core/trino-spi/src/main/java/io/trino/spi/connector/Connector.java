@@ -16,7 +16,6 @@ package io.trino.spi.connector;
 import io.trino.spi.eventlistener.EventListener;
 import io.trino.spi.function.FunctionProvider;
 import io.trino.spi.procedure.Procedure;
-import io.trino.spi.ptf.ConnectorTableFunction;
 import io.trino.spi.session.PropertyMetadata;
 import io.trino.spi.transaction.IsolationLevel;
 
@@ -152,14 +151,6 @@ public interface Connector
     }
 
     default Set<TableProcedureMetadata> getTableProcedures()
-    {
-        return emptySet();
-    }
-
-    /**
-     * @return the set of table functions provided by this connector
-     */
-    default Set<ConnectorTableFunction> getTableFunctions()
     {
         return emptySet();
     }

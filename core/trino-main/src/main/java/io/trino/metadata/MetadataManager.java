@@ -2270,6 +2270,23 @@ public final class MetadataManager
     }
 
     @Override
+    public Optional<ResolvedTableFunction> resolveTableFunction(Session session, QualifiedName name)
+    {
+        return functionResolver.resolveTableFunction(
+                session,
+                toQualifiedFunctionName(name),
+                catalogSchemaFunctionName -> getTableFunctionMetadata(session, catalogSchemaFunctionName));
+    }
+
+    private Optional<ResolvedTableFunction> getTableFunctionMetadata(Session session, CatalogSchemaFunctionName name)
+    {
+        ConnectorSession connectorSession = session.toConnectorSession(name.getCatalogName());
+        return getMetadata(session, new CatalogName(name.getCatalogName()))
+                .getTableFunctionMetadata(connectorSession, name.getSchemaFunctionName())
+                .map(connectorTableFunction -> new ResolvedTableFunction(name, connectorTableFunction));
+    }
+
+    @Override
     public FunctionMetadata getFunctionMetadata(Session session, ResolvedFunction resolvedFunction)
     {
         return getFunctionMetadata(session, resolvedFunction.getCatalog(), resolvedFunction.getFunctionId(), resolvedFunction.getSignature());

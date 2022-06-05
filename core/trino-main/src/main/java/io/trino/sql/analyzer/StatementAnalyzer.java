@@ -29,16 +29,16 @@ import io.trino.connector.CatalogName;
 import io.trino.execution.Column;
 import io.trino.execution.warnings.WarningCollector;
 import io.trino.metadata.AnalyzePropertyManager;
+import io.trino.metadata.CatalogSchemaFunctionName;
 import io.trino.metadata.MaterializedViewDefinition;
 import io.trino.metadata.Metadata;
 import io.trino.metadata.OperatorNotFoundException;
 import io.trino.metadata.QualifiedObjectName;
 import io.trino.metadata.RedirectionAwareTableHandle;
 import io.trino.metadata.ResolvedFunction;
+import io.trino.metadata.ResolvedTableFunction;
 import io.trino.metadata.SessionPropertyManager;
 import io.trino.metadata.TableExecuteHandle;
-import io.trino.metadata.TableFunctionMetadata;
-import io.trino.metadata.TableFunctionRegistry;
 import io.trino.metadata.TableHandle;
 import io.trino.metadata.TableLayout;
 import io.trino.metadata.TableMetadata;
@@ -69,7 +69,6 @@ import io.trino.spi.function.FunctionKind;
 import io.trino.spi.function.OperatorType;
 import io.trino.spi.ptf.Argument;
 import io.trino.spi.ptf.ArgumentSpecification;
-import io.trino.spi.ptf.ConnectorTableFunction;
 import io.trino.spi.ptf.Descriptor;
 import io.trino.spi.ptf.DescriptorArgumentSpecification;
 import io.trino.spi.ptf.ReturnTypeSpecification;
@@ -78,6 +77,7 @@ import io.trino.spi.ptf.ScalarArgument;
 import io.trino.spi.ptf.ScalarArgumentSpecification;
 import io.trino.spi.ptf.TableArgumentSpecification;
 import io.trino.spi.ptf.TableFunctionAnalysis;
+import io.trino.spi.ptf.TableFunctionMetadata;
 import io.trino.spi.security.AccessDeniedException;
 import io.trino.spi.security.GroupProvider;
 import io.trino.spi.security.Identity;
@@ -358,7 +358,6 @@ class StatementAnalyzer
     private final AccessControl accessControl;
     private final TransactionManager transactionManager;
     private final TableProceduresRegistry tableProceduresRegistry;
-    private final TableFunctionRegistry tableFunctionRegistry;
     private final SessionPropertyManager sessionPropertyManager;
     private final TablePropertyManager tablePropertyManager;
     private final AnalyzePropertyManager analyzePropertyManager;
@@ -377,7 +376,6 @@ class StatementAnalyzer
             TransactionManager transactionManager,
             Session session,
             TableProceduresRegistry tableProceduresRegistry,
-            TableFunctionRegistry tableFunctionRegistry,
             SessionPropertyManager sessionPropertyManager,
             TablePropertyManager tablePropertyManager,
             AnalyzePropertyManager analyzePropertyManager,
@@ -396,7 +394,6 @@ class StatementAnalyzer
         this.transactionManager = requireNonNull(transactionManager, "transactionManager is null");
         this.session = requireNonNull(session, "session is null");
         this.tableProceduresRegistry = requireNonNull(tableProceduresRegistry, "tableProceduresRegistry is null");
-        this.tableFunctionRegistry = requireNonNull(tableFunctionRegistry, "tableFunctionRegistry is null");
         this.sessionPropertyManager = requireNonNull(sessionPropertyManager, "sessionPropertyManager is null");
         this.tablePropertyManager = requireNonNull(tablePropertyManager, "tablePropertyManager is null");
         this.analyzePropertyManager = requireNonNull(analyzePropertyManager, "analyzePropertyManager is null");
@@ -1472,25 +1469,27 @@ class StatementAnalyzer
         @Override
         protected Scope visitTableFunctionInvocation(TableFunctionInvocation node, Optional<Scope> scope)
         {
-            TableFunctionMetadata tableFunctionMetadata = tableFunctionRegistry.resolve(session, node.getName());
-            if (tableFunctionMetadata == null) {
-                throw semanticException(FUNCTION_NOT_FOUND, node, "Table function %s not registered", node.getName());
-            }
+            ResolvedTableFunction resolvedTableFunction = metadata.resolveTableFunction(session, node.getName())
+                    .orElseThrow(() -> semanticException(FUNCTION_NOT_FOUND, node, "Table function %s not registered", node.getName()));
 
-            ConnectorTableFunction function = tableFunctionMetadata.getFunction();
-            CatalogName catalogName = tableFunctionMetadata.getCatalogName();
+            TableFunctionMetadata functionMetadata = resolvedTableFunction.getFunction();
+            CatalogSchemaFunctionName functionName = resolvedTableFunction.getFunctionName();
 
-            QualifiedObjectName functionName = new QualifiedObjectName(catalogName.getCatalogName(), function.getSchema(), function.getName());
-            accessControl.checkCanExecuteFunction(SecurityContext.of(session), FunctionKind.TABLE, functionName);
+            accessControl.checkCanExecuteFunction(SecurityContext.of(session), FunctionKind.TABLE, functionName.toQualifiedObjectName());
 
-            Map<String, Argument> passedArguments = analyzeArguments(node, function.getArguments(), node.getArguments());
+            Map<String, Argument> passedArguments = analyzeArguments(node, functionMetadata.getArguments(), node.getArguments());
 
             // a call to getRequiredCatalogHandle() is necessary so that the catalog is recorded by the TransactionManager
             ConnectorTransactionHandle transactionHandle = transactionManager.getConnectorTransaction(
                     session.getRequiredTransactionId(),
-                    getRequiredCatalogHandle(metadata, session, node, catalogName.getCatalogName()));
-            TableFunctionAnalysis functionAnalysis = function.analyze(session.toConnectorSession(catalogName), transactionHandle, passedArguments);
-            analysis.setTableFunctionAnalysis(node, new TableFunctionInvocationAnalysis(catalogName, functionName.toString(), passedArguments, functionAnalysis.getHandle(), transactionHandle));
+                    getRequiredCatalogHandle(metadata, session, node, functionName.getCatalogName()));
+            TableFunctionAnalysis functionAnalysis = plannerContext.getFunctionManager().analyzeTableFunction(
+                    new CatalogName(functionName.getCatalogName()),
+                    session.toConnectorSession(functionName.getCatalogName()),
+                    transactionHandle,
+                    functionMetadata.getFunctionId(),
+                    passedArguments);
+            analysis.setTableFunctionAnalysis(node, new TableFunctionInvocationAnalysis(functionName, passedArguments, functionAnalysis.getHandle(), transactionHandle));
 
             // TODO handle the DescriptorMapping descriptorsToTables mapping from the TableFunction.Analysis:
             // This is a mapping of descriptor arguments to table arguments. It consists of two parts:
@@ -1525,7 +1524,7 @@ class StatementAnalyzer
             // - for tables with the "pass through columns" option, these are all columns of the table,
             // - for tables without the "pass through columns" option, these are the partitioning columns of the table, if any.
             // 2. columns created by the table function, called the proper columns.
-            ReturnTypeSpecification returnTypeSpecification = function.getReturnTypeSpecification();
+            ReturnTypeSpecification returnTypeSpecification = functionMetadata.getReturnTypeSpecification();
             Optional<Descriptor> analyzedProperColumnsDescriptor = functionAnalysis.getReturnedType();
             Descriptor properColumnsDescriptor;
             if (returnTypeSpecification == ONLY_PASS_THROUGH) {

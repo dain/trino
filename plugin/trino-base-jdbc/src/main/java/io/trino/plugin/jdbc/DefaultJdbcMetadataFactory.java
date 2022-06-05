@@ -13,10 +13,13 @@
  */
 package io.trino.plugin.jdbc;
 
+import com.google.common.collect.ImmutableList;
 import io.airlift.units.Duration;
+import io.trino.plugin.jdbc.ptf.TableFunction;
 
 import javax.inject.Inject;
 
+import java.util.Collection;
 import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
@@ -26,11 +29,13 @@ public class DefaultJdbcMetadataFactory
         implements JdbcMetadataFactory
 {
     private final JdbcClient jdbcClient;
+    private final Collection<TableFunction> tableFunctions;
 
     @Inject
-    public DefaultJdbcMetadataFactory(JdbcClient jdbcClient)
+    public DefaultJdbcMetadataFactory(JdbcClient jdbcClient, Collection<TableFunction> tableFunctions)
     {
         this.jdbcClient = requireNonNull(jdbcClient, "jdbcClient is null");
+        this.tableFunctions = ImmutableList.copyOf(requireNonNull(tableFunctions, "tableFunctions is null"));
     }
 
     @Override
@@ -49,6 +54,6 @@ public class DefaultJdbcMetadataFactory
 
     protected JdbcMetadata create(JdbcClient transactionCachingJdbcClient)
     {
-        return new DefaultJdbcMetadata(transactionCachingJdbcClient, true);
+        return new DefaultJdbcMetadata(transactionCachingJdbcClient, true, tableFunctions);
     }
 }

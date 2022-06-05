@@ -767,6 +767,12 @@ public class CountingAccessMetadata
     }
 
     @Override
+    public Optional<ResolvedTableFunction> resolveTableFunction(Session session, QualifiedName name)
+    {
+        return delegate.resolveTableFunction(session, name);
+    }
+
+    @Override
     public FunctionMetadata getFunctionMetadata(Session session, ResolvedFunction resolvedFunction)
     {
         return delegate.getFunctionMetadata(session, resolvedFunction);

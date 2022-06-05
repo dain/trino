@@ -18,6 +18,7 @@ import io.trino.plugin.jdbc.DefaultJdbcMetadata;
 import io.trino.plugin.jdbc.JdbcColumnHandle;
 import io.trino.plugin.jdbc.JdbcTableHandle;
 import io.trino.plugin.jdbc.mapping.IdentifierMapping;
+import io.trino.plugin.jdbc.ptf.TableFunction;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.AggregateFunction;
 import io.trino.spi.connector.AggregationApplicationResult;
@@ -67,9 +68,9 @@ public class PhoenixMetadata
     private final IdentifierMapping identifierMapping;
 
     @Inject
-    public PhoenixMetadata(PhoenixClient phoenixClient, IdentifierMapping identifierMapping)
+    public PhoenixMetadata(PhoenixClient phoenixClient, IdentifierMapping identifierMapping, Collection<TableFunction> tableFunctions)
     {
-        super(phoenixClient, false);
+        super(phoenixClient, false, tableFunctions);
         this.phoenixClient = requireNonNull(phoenixClient, "phoenixClient is null");
         this.identifierMapping = requireNonNull(identifierMapping, "identifierMapping is null");
     }

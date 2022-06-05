@@ -26,6 +26,7 @@ import io.trino.spi.function.FunctionMetadata;
 import io.trino.spi.function.SchemaFunctionName;
 import io.trino.spi.predicate.TupleDomain;
 import io.trino.spi.ptf.ConnectorTableFunctionHandle;
+import io.trino.spi.ptf.TableFunctionMetadata;
 import io.trino.spi.security.GrantInfo;
 import io.trino.spi.security.Privilege;
 import io.trino.spi.security.RoleGrant;
@@ -784,6 +785,14 @@ public interface ConnectorMetadata
     default Collection<FunctionMetadata> getFunctions(ConnectorSession session, SchemaFunctionName name)
     {
         return List.of();
+    }
+
+    /**
+     * Get a table function with the specified name.
+     */
+    default Optional<TableFunctionMetadata> getTableFunctionMetadata(ConnectorSession connectorSession, SchemaFunctionName schemaFunctionName)
+    {
+        return Optional.empty();
     }
 
     /**

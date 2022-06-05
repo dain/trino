@@ -23,7 +23,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multiset;
 import com.google.common.collect.Streams;
-import io.trino.connector.CatalogName;
+import io.trino.metadata.CatalogSchemaFunctionName;
 import io.trino.metadata.QualifiedObjectName;
 import io.trino.metadata.ResolvedFunction;
 import io.trino.metadata.TableExecuteHandle;
@@ -1913,32 +1913,24 @@ public class Analysis
 
     public static class TableFunctionInvocationAnalysis
     {
-        private final CatalogName catalogName;
-        private final String functionName;
+        private final CatalogSchemaFunctionName functionName;
         private final Map<String, Argument> arguments;
         private final ConnectorTableFunctionHandle connectorTableFunctionHandle;
         private final ConnectorTransactionHandle transactionHandle;
 
         public TableFunctionInvocationAnalysis(
-                CatalogName catalogName,
-                String functionName,
+                CatalogSchemaFunctionName functionName,
                 Map<String, Argument> arguments,
                 ConnectorTableFunctionHandle connectorTableFunctionHandle,
                 ConnectorTransactionHandle transactionHandle)
         {
-            this.catalogName = requireNonNull(catalogName, "catalogName is null");
             this.functionName = requireNonNull(functionName, "functionName is null");
             this.arguments = requireNonNull(arguments, "arguments is null");
             this.connectorTableFunctionHandle = requireNonNull(connectorTableFunctionHandle, "connectorTableFunctionHandle is null");
             this.transactionHandle = requireNonNull(transactionHandle, "transactionHandle is null");
         }
 
-        public CatalogName getCatalogName()
-        {
-            return catalogName;
-        }
-
-        public String getFunctionName()
+        public CatalogSchemaFunctionName getFunctionName()
         {
             return functionName;
         }

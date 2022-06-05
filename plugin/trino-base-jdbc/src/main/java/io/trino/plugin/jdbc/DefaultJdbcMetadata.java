@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableSet;
 import io.airlift.slice.Slice;
 import io.trino.plugin.jdbc.PredicatePushdownController.DomainPushdownResult;
 import io.trino.plugin.jdbc.ptf.Query.QueryHandle;
+import io.trino.plugin.jdbc.ptf.TableFunction;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.AggregateFunction;
 import io.trino.spi.connector.AggregationApplicationResult;
@@ -55,9 +56,11 @@ import io.trino.spi.connector.TopNApplicationResult;
 import io.trino.spi.expression.ConnectorExpression;
 import io.trino.spi.expression.Constant;
 import io.trino.spi.expression.Variable;
+import io.trino.spi.function.SchemaFunctionName;
 import io.trino.spi.predicate.Domain;
 import io.trino.spi.predicate.TupleDomain;
 import io.trino.spi.ptf.ConnectorTableFunctionHandle;
+import io.trino.spi.ptf.TableFunctionMetadata;
 import io.trino.spi.security.AccessDeniedException;
 import io.trino.spi.security.TrinoPrincipal;
 import io.trino.spi.statistics.ComputedStatistics;
@@ -101,13 +104,16 @@ public class DefaultJdbcMetadata
 
     private final JdbcClient jdbcClient;
     private final boolean precalculateStatisticsForPushdown;
+    private final Map<SchemaFunctionName, TableFunctionMetadata> tableFunctions;
 
     private final AtomicReference<Runnable> rollbackAction = new AtomicReference<>();
 
-    public DefaultJdbcMetadata(JdbcClient jdbcClient, boolean precalculateStatisticsForPushdown)
+    public DefaultJdbcMetadata(JdbcClient jdbcClient, boolean precalculateStatisticsForPushdown, Collection<TableFunction> tableFunctions)
     {
         this.jdbcClient = requireNonNull(jdbcClient, "jdbcClient is null");
         this.precalculateStatisticsForPushdown = precalculateStatisticsForPushdown;
+        this.tableFunctions = requireNonNull(tableFunctions, "tableFunctions is null").stream()
+                .collect(toImmutableMap(TableFunction::getName, TableFunction::getMetadata));
     }
 
     @Override
@@ -139,6 +145,12 @@ public class DefaultJdbcMetadata
     public Optional<SystemTable> getSystemTable(ConnectorSession session, SchemaTableName tableName)
     {
         return jdbcClient.getSystemTable(session, tableName);
+    }
+
+    @Override
+    public Optional<TableFunctionMetadata> getTableFunctionMetadata(ConnectorSession connectorSession, SchemaFunctionName schemaFunctionName)
+    {
+        return Optional.ofNullable(tableFunctions.get(schemaFunctionName));
     }
 
     @Override

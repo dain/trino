@@ -21,6 +21,7 @@ import io.trino.connector.CatalogName;
 import io.trino.spi.TrinoException;
 import io.trino.spi.block.Block;
 import io.trino.spi.connector.ConnectorSession;
+import io.trino.spi.connector.ConnectorTransactionHandle;
 import io.trino.spi.function.AggregationImplementation;
 import io.trino.spi.function.BoundSignature;
 import io.trino.spi.function.FunctionDependencies;
@@ -31,6 +32,8 @@ import io.trino.spi.function.InvocationConvention;
 import io.trino.spi.function.InvocationConvention.InvocationArgumentConvention;
 import io.trino.spi.function.ScalarImplementation;
 import io.trino.spi.function.WindowFunctionSupplier;
+import io.trino.spi.ptf.Argument;
+import io.trino.spi.ptf.TableFunctionAnalysis;
 import io.trino.spi.type.Type;
 import io.trino.spi.type.TypeOperators;
 import io.trino.type.BlockTypeOperators;
@@ -39,6 +42,7 @@ import javax.inject.Inject;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -158,6 +162,34 @@ public class FunctionManager
                 resolvedFunction.getFunctionId(),
                 resolvedFunction.getSignature(),
                 functionDependencies);
+    }
+
+    /**
+     * This method is called by the Analyzer. Its main purposes are to:
+     * 1. Determine the resulting relation type of the Table Function in case when the declared return type is GENERIC_TABLE.
+     * 2. Declare the dependencies between the input descriptors and the input tables.
+     * 3. Perform function-specific validation and pre-processing of the input arguments.
+     * As part of function-specific validation, the Table Function's author might want to:
+     * - check if the descriptors which reference input tables contain a correct number of column references
+     * - check if the referenced input columns have appropriate types to fit the function's logic // TODO return request for coercions to the Analyzer in the TableFunctionAnalysis object
+     * - if there is a descriptor which describes the function's output, check if it matches the shape of the actual function's output
+     * - for table arguments, check the number and types of ordering columns
+     * <p>
+     * The actual argument values, and the pre-processing results can be stored in an ConnectorTableFunctionHandle
+     * object, which will be passed along with the Table Function invocation through subsequent phases of planning.
+     *
+     * @param arguments actual invocation arguments, mapped by argument names
+     */
+    public TableFunctionAnalysis analyzeTableFunction(
+            CatalogName catalogName,
+            ConnectorSession session,
+            ConnectorTransactionHandle transaction,
+            FunctionId functionId,
+            Map<String, Argument> arguments)
+    {
+        FunctionProvider functionProvider = functionProviders.get(catalogName);
+        checkArgument(functionProvider != null, "No function provider for catalog: '%s' (function '%s')", catalogName, functionId);
+        return functionProvider.analyzeTableFunction(session, transaction, functionId, arguments);
     }
 
     private FunctionDependencies getFunctionDependencies(ResolvedFunction resolvedFunction)

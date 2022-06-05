@@ -30,7 +30,7 @@ import io.trino.plugin.jdbc.QueryBuilder;
 import io.trino.plugin.jdbc.RemoteQueryCancellationModule;
 import io.trino.plugin.jdbc.credential.CredentialProvider;
 import io.trino.plugin.jdbc.ptf.Query;
-import io.trino.spi.ptf.ConnectorTableFunction;
+import io.trino.plugin.jdbc.ptf.TableFunction;
 import org.postgresql.Driver;
 
 import java.util.Properties;
@@ -55,7 +55,7 @@ public class PostgreSqlClientModule
         install(new DecimalModule());
         install(new JdbcJoinPushdownSupportModule());
         install(new RemoteQueryCancellationModule());
-        newSetBinder(binder, ConnectorTableFunction.class).addBinding().toProvider(Query.class).in(Scopes.SINGLETON);
+        newSetBinder(binder, TableFunction.class).addBinding().toProvider(Query.class).in(Scopes.SINGLETON);
     }
 
     @Provides

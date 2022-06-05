@@ -29,7 +29,7 @@ import io.trino.plugin.jdbc.JdbcJoinPushdownSupportModule;
 import io.trino.plugin.jdbc.JdbcStatisticsConfig;
 import io.trino.plugin.jdbc.credential.CredentialProvider;
 import io.trino.plugin.jdbc.ptf.Query;
-import io.trino.spi.ptf.ConnectorTableFunction;
+import io.trino.plugin.jdbc.ptf.TableFunction;
 
 import java.sql.SQLException;
 import java.util.Properties;
@@ -49,7 +49,7 @@ public class MySqlClientModule
         configBinder(binder).bindConfig(JdbcStatisticsConfig.class);
         install(new DecimalModule());
         install(new JdbcJoinPushdownSupportModule());
-        newSetBinder(binder, ConnectorTableFunction.class).addBinding().toProvider(Query.class).in(Scopes.SINGLETON);
+        newSetBinder(binder, TableFunction.class).addBinding().toProvider(Query.class).in(Scopes.SINGLETON);
     }
 
     @Provides

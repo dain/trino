@@ -17,6 +17,8 @@ import io.trino.spi.function.SchemaFunctionName;
 
 import java.util.Objects;
 
+import static java.util.Objects.requireNonNull;
+
 public final class CatalogSchemaFunctionName
 {
     private final String catalogName;
@@ -24,8 +26,11 @@ public final class CatalogSchemaFunctionName
 
     public CatalogSchemaFunctionName(String catalogName, SchemaFunctionName schemaFunctionName)
     {
-        this.catalogName = catalogName;
-        this.schemaFunctionName = schemaFunctionName;
+        this.catalogName = requireNonNull(catalogName, "catalogName is null");
+        if (catalogName.isEmpty()) {
+            throw new IllegalArgumentException("catalogName is empty");
+        }
+        this.schemaFunctionName = requireNonNull(schemaFunctionName, "schemaFunctionName is null");
     }
 
     public CatalogSchemaFunctionName(String catalogName, String schemaName, String functionName)
@@ -67,5 +72,10 @@ public final class CatalogSchemaFunctionName
     public String toString()
     {
         return catalogName + '.' + schemaFunctionName;
+    }
+
+    public QualifiedObjectName toQualifiedObjectName()
+    {
+        return new QualifiedObjectName(catalogName, schemaFunctionName.getSchemaName(), schemaFunctionName.getFunctionName());
     }
 }

@@ -17,6 +17,7 @@ import com.google.common.collect.ImmutableSet;
 import io.airlift.bootstrap.LifeCycleManager;
 import io.trino.plugin.base.classloader.ClassLoaderSafeConnectorMetadata;
 import io.trino.plugin.base.session.SessionPropertiesProvider;
+import io.trino.plugin.jdbc.ptf.TableFunction;
 import io.trino.spi.connector.Connector;
 import io.trino.spi.connector.ConnectorAccessControl;
 import io.trino.spi.connector.ConnectorCapabilities;
@@ -26,8 +27,8 @@ import io.trino.spi.connector.ConnectorRecordSetProvider;
 import io.trino.spi.connector.ConnectorSession;
 import io.trino.spi.connector.ConnectorSplitManager;
 import io.trino.spi.connector.ConnectorTransactionHandle;
+import io.trino.spi.function.FunctionProvider;
 import io.trino.spi.procedure.Procedure;
-import io.trino.spi.ptf.ConnectorTableFunction;
 import io.trino.spi.session.PropertyMetadata;
 import io.trino.spi.transaction.IsolationLevel;
 
@@ -51,7 +52,7 @@ public class JdbcConnector
     private final ConnectorPageSinkProvider jdbcPageSinkProvider;
     private final Optional<ConnectorAccessControl> accessControl;
     private final Set<Procedure> procedures;
-    private final Set<ConnectorTableFunction> connectorTableFunctions;
+    private final Set<TableFunction> tableFunctions;
     private final List<PropertyMetadata<?>> sessionProperties;
     private final List<PropertyMetadata<?>> tableProperties;
     private final JdbcTransactionManager transactionManager;
@@ -64,7 +65,7 @@ public class JdbcConnector
             ConnectorPageSinkProvider jdbcPageSinkProvider,
             Optional<ConnectorAccessControl> accessControl,
             Set<Procedure> procedures,
-            Set<ConnectorTableFunction> connectorTableFunctions,
+            Set<TableFunction> tableFunctions,
             Set<SessionPropertiesProvider> sessionProperties,
             Set<TablePropertiesProvider> tableProperties,
             JdbcTransactionManager transactionManager)
@@ -75,7 +76,7 @@ public class JdbcConnector
         this.jdbcPageSinkProvider = requireNonNull(jdbcPageSinkProvider, "jdbcPageSinkProvider is null");
         this.accessControl = requireNonNull(accessControl, "accessControl is null");
         this.procedures = ImmutableSet.copyOf(requireNonNull(procedures, "procedures is null"));
-        this.connectorTableFunctions = ImmutableSet.copyOf(requireNonNull(connectorTableFunctions, "connectorTableFunctions is null"));
+        this.tableFunctions = ImmutableSet.copyOf(requireNonNull(tableFunctions, "tableFunctions is null"));
         this.sessionProperties = requireNonNull(sessionProperties, "sessionProperties is null").stream()
                 .flatMap(sessionPropertiesProvider -> sessionPropertiesProvider.getSessionProperties().stream())
                 .collect(toImmutableList());
@@ -140,15 +141,18 @@ public class JdbcConnector
     }
 
     @Override
-    public Set<ConnectorTableFunction> getTableFunctions()
-    {
-        return connectorTableFunctions;
-    }
-
-    @Override
     public List<PropertyMetadata<?>> getSessionProperties()
     {
         return sessionProperties;
+    }
+
+    @Override
+    public Optional<FunctionProvider> getFunctionProvider()
+    {
+        if (tableFunctions.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(new JdbcFunctionProvider(tableFunctions));
     }
 
     @Override

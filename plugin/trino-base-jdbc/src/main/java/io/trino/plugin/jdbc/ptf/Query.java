@@ -17,7 +17,6 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableList;
 import io.airlift.slice.Slice;
-import io.trino.plugin.base.classloader.ClassLoaderSafeConnectorTableFunction;
 import io.trino.plugin.jdbc.JdbcColumnHandle;
 import io.trino.plugin.jdbc.JdbcMetadata;
 import io.trino.plugin.jdbc.JdbcTableHandle;
@@ -26,15 +25,16 @@ import io.trino.plugin.jdbc.PreparedQuery;
 import io.trino.spi.connector.ConnectorSession;
 import io.trino.spi.connector.ConnectorTableHandle;
 import io.trino.spi.connector.ConnectorTransactionHandle;
-import io.trino.spi.ptf.AbstractConnectorTableFunction;
+import io.trino.spi.function.FunctionId;
+import io.trino.spi.function.SchemaFunctionName;
 import io.trino.spi.ptf.Argument;
-import io.trino.spi.ptf.ConnectorTableFunction;
 import io.trino.spi.ptf.ConnectorTableFunctionHandle;
 import io.trino.spi.ptf.Descriptor;
 import io.trino.spi.ptf.Descriptor.Field;
 import io.trino.spi.ptf.ScalarArgument;
 import io.trino.spi.ptf.ScalarArgumentSpecification;
 import io.trino.spi.ptf.TableFunctionAnalysis;
+import io.trino.spi.ptf.TableFunctionMetadata;
 
 import javax.inject.Inject;
 import javax.inject.Provider;
@@ -50,11 +50,8 @@ import static io.trino.spi.type.VarcharType.VARCHAR;
 import static java.util.Objects.requireNonNull;
 
 public class Query
-        implements Provider<ConnectorTableFunction>
+        implements Provider<TableFunction>
 {
-    public static final String SCHEMA_NAME = "system";
-    public static final String NAME = "query";
-
     private final JdbcTransactionManager transactionManager;
 
     @Inject
@@ -64,27 +61,42 @@ public class Query
     }
 
     @Override
-    public ConnectorTableFunction get()
+    public TableFunction get()
     {
-        return new ClassLoaderSafeConnectorTableFunction(new QueryFunction(transactionManager), getClass().getClassLoader());
+        return new QueryFunctionMetadata(transactionManager);
     }
 
-    public static class QueryFunction
-            extends AbstractConnectorTableFunction
+    public static class QueryFunctionMetadata
+            implements TableFunction
     {
+        private static final SchemaFunctionName FUNCTION_NAME = new SchemaFunctionName("system", "query");
+        private static final FunctionId FUNCTION_ID = new FunctionId("passthrough_query");
+        private static final TableFunctionMetadata FUNCTION_METADATA = TableFunctionMetadata.builder()
+                .functionId(FUNCTION_ID)
+                .argument(ScalarArgumentSpecification.builder()
+                        .name("QUERY")
+                        .type(VARCHAR)
+                        .build())
+                .returnTypeSpecification(GENERIC_TABLE)
+                .builder();
+
         private final JdbcTransactionManager transactionManager;
 
-        public QueryFunction(JdbcTransactionManager transactionManager)
+        public QueryFunctionMetadata(JdbcTransactionManager transactionManager)
         {
-            super(
-                    SCHEMA_NAME,
-                    NAME,
-                    List.of(ScalarArgumentSpecification.builder()
-                            .name("QUERY")
-                            .type(VARCHAR)
-                            .build()),
-                    GENERIC_TABLE);
             this.transactionManager = requireNonNull(transactionManager, "transactionManager is null");
+        }
+
+        @Override
+        public SchemaFunctionName getName()
+        {
+            return FUNCTION_NAME;
+        }
+
+        @Override
+        public TableFunctionMetadata getMetadata()
+        {
+            return FUNCTION_METADATA;
         }
 
         @Override

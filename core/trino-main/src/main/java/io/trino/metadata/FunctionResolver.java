@@ -66,6 +66,20 @@ public class FunctionResolver
         this.typeManager = requireNonNull(typeManager, "typeManager is null");
     }
 
+    public Optional<ResolvedTableFunction> resolveTableFunction(
+            Session session,
+            QualifiedFunctionName qualifiedName,
+            Function<CatalogSchemaFunctionName, Optional<ResolvedTableFunction>> candidateLoader)
+    {
+        for (CatalogSchemaFunctionName catalogSchemaFunctionName : toPath(session, qualifiedName)) {
+            Optional<ResolvedTableFunction> candidate = candidateLoader.apply(catalogSchemaFunctionName);
+            if (candidate.isPresent()) {
+                return candidate;
+            }
+        }
+        return Optional.empty();
+    }
+
     boolean isAggregationFunction(Session session, QualifiedFunctionName name, Function<CatalogSchemaFunctionName, Collection<FunctionMetadata>> candidateLoader)
     {
         for (CatalogSchemaFunctionName catalogSchemaFunctionName : toPath(session, name)) {

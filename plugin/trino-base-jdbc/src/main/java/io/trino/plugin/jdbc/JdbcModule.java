@@ -23,12 +23,12 @@ import io.trino.plugin.base.CatalogName;
 import io.trino.plugin.base.session.SessionPropertiesProvider;
 import io.trino.plugin.jdbc.mapping.IdentifierMappingModule;
 import io.trino.plugin.jdbc.procedure.FlushJdbcMetadataCacheProcedure;
+import io.trino.plugin.jdbc.ptf.TableFunction;
 import io.trino.spi.connector.ConnectorAccessControl;
 import io.trino.spi.connector.ConnectorPageSinkProvider;
 import io.trino.spi.connector.ConnectorRecordSetProvider;
 import io.trino.spi.connector.ConnectorSplitManager;
 import io.trino.spi.procedure.Procedure;
-import io.trino.spi.ptf.ConnectorTableFunction;
 
 import javax.annotation.PreDestroy;
 import javax.inject.Provider;
@@ -84,7 +84,7 @@ public class JdbcModule
 
         newSetBinder(binder, Procedure.class).addBinding().toProvider(FlushJdbcMetadataCacheProcedure.class).in(Scopes.SINGLETON);
 
-        newSetBinder(binder, ConnectorTableFunction.class);
+        newSetBinder(binder, TableFunction.class);
 
         binder.bind(ConnectionFactory.class)
                 .annotatedWith(ForLazyConnectionFactory.class)
