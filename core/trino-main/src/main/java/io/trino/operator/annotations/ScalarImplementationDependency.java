@@ -23,6 +23,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandleProxies;
 
 import static java.lang.invoke.MethodHandles.dropArguments;
+import static java.lang.invoke.MethodHandles.insertArguments;
 import static java.util.Objects.requireNonNull;
 
 public abstract class ScalarImplementationDependency
@@ -56,6 +57,7 @@ public abstract class ScalarImplementationDependency
     public Object resolve(FunctionBinding functionBinding, FunctionDependencies functionDependencies)
     {
         MethodHandle methodHandle = getInvoker(functionBinding, functionDependencies, invocationConvention).getMethodHandle();
+        methodHandle = usePrivateProfile(methodHandle);
         if (invocationConvention.supportsSession() && !methodHandle.type().parameterType(0).equals(ConnectorSession.class)) {
             methodHandle = dropArguments(methodHandle, 0, ConnectorSession.class);
         }
@@ -63,6 +65,14 @@ public abstract class ScalarImplementationDependency
             return methodHandle;
         }
         return MethodHandleProxies.asInterfaceInstance(type, methodHandle);
+    }
+
+    /**
+     * Force method handle to use a separate JVM optimizer profile.
+     */
+    private static MethodHandle usePrivateProfile(MethodHandle handle)
+    {
+        return insertArguments(dropArguments(handle, 0, Object.class), 0, (Object) null);
     }
 
     @Override
