@@ -13,10 +13,7 @@
  */
 package io.trino.metadata;
 
-import com.google.common.cache.CacheBuilder;
-import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.trino.FeaturesConfig;
-import io.trino.collect.cache.NonEvictableCache;
 import io.trino.operator.aggregation.AggregationMetadata;
 import io.trino.operator.window.WindowFunctionSupplier;
 import io.trino.spi.TrinoException;
@@ -33,60 +30,26 @@ import javax.inject.Inject;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
-import java.util.Objects;
-import java.util.Optional;
 
-import static com.google.common.base.MoreObjects.toStringHelper;
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Throwables.throwIfInstanceOf;
 import static com.google.common.primitives.Primitives.wrap;
 import static io.trino.client.NodeVersion.UNKNOWN;
-import static io.trino.collect.cache.CacheUtils.uncheckedCacheGet;
-import static io.trino.collect.cache.SafeCaches.buildNonEvictableCache;
 import static io.trino.spi.StandardErrorCode.FUNCTION_IMPLEMENTATION_ERROR;
 import static io.trino.type.InternalTypeManager.TESTING_TYPE_MANAGER;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
-import static java.util.concurrent.TimeUnit.HOURS;
 
 public class FunctionManager
 {
-    private final NonEvictableCache<FunctionKey, FunctionInvoker> specializedScalarCache;
-    private final NonEvictableCache<FunctionKey, AggregationMetadata> specializedAggregationCache;
-    private final NonEvictableCache<FunctionKey, WindowFunctionSupplier> specializedWindowCache;
-
     private final GlobalFunctionCatalog globalFunctionCatalog;
 
     @Inject
     public FunctionManager(GlobalFunctionCatalog globalFunctionCatalog)
     {
-        specializedScalarCache = buildNonEvictableCache(CacheBuilder.newBuilder()
-                .maximumSize(1000)
-                .expireAfterWrite(1, HOURS));
-
-        specializedAggregationCache = buildNonEvictableCache(CacheBuilder.newBuilder()
-                .maximumSize(1000)
-                .expireAfterWrite(1, HOURS));
-
-        specializedWindowCache = buildNonEvictableCache(CacheBuilder.newBuilder()
-                .maximumSize(1000)
-                .expireAfterWrite(1, HOURS));
-
-        this.globalFunctionCatalog = globalFunctionCatalog;
+        this.globalFunctionCatalog = requireNonNull(globalFunctionCatalog, "globalFunctionCatalog is null");
     }
 
     public FunctionInvoker getScalarFunctionInvoker(ResolvedFunction resolvedFunction, InvocationConvention invocationConvention)
-    {
-        try {
-            return uncheckedCacheGet(specializedScalarCache, new FunctionKey(resolvedFunction, invocationConvention), () -> getScalarFunctionInvokerInternal(resolvedFunction, invocationConvention));
-        }
-        catch (UncheckedExecutionException e) {
-            throwIfInstanceOf(e.getCause(), TrinoException.class);
-            throw new RuntimeException(e.getCause());
-        }
-    }
-
-    private FunctionInvoker getScalarFunctionInvokerInternal(ResolvedFunction resolvedFunction, InvocationConvention invocationConvention)
     {
         FunctionDependencies functionDependencies = getFunctionDependencies(resolvedFunction);
         FunctionInvoker functionInvoker = globalFunctionCatalog.getScalarFunctionInvoker(
@@ -100,17 +63,6 @@ public class FunctionManager
 
     public AggregationMetadata getAggregateFunctionImplementation(ResolvedFunction resolvedFunction)
     {
-        try {
-            return uncheckedCacheGet(specializedAggregationCache, new FunctionKey(resolvedFunction), () -> getAggregateFunctionImplementationInternal(resolvedFunction));
-        }
-        catch (UncheckedExecutionException e) {
-            throwIfInstanceOf(e.getCause(), TrinoException.class);
-            throw new RuntimeException(e.getCause());
-        }
-    }
-
-    private AggregationMetadata getAggregateFunctionImplementationInternal(ResolvedFunction resolvedFunction)
-    {
         FunctionDependencies functionDependencies = getFunctionDependencies(resolvedFunction);
         return globalFunctionCatalog.getAggregateFunctionImplementation(
                 resolvedFunction.getFunctionId(),
@@ -119,17 +71,6 @@ public class FunctionManager
     }
 
     public WindowFunctionSupplier getWindowFunctionImplementation(ResolvedFunction resolvedFunction)
-    {
-        try {
-            return uncheckedCacheGet(specializedWindowCache, new FunctionKey(resolvedFunction), () -> getWindowFunctionImplementationInternal(resolvedFunction));
-        }
-        catch (UncheckedExecutionException e) {
-            throwIfInstanceOf(e.getCause(), TrinoException.class);
-            throw new RuntimeException(e.getCause());
-        }
-    }
-
-    private WindowFunctionSupplier getWindowFunctionImplementationInternal(ResolvedFunction resolvedFunction)
     {
         FunctionDependencies functionDependencies = getFunctionDependencies(resolvedFunction);
         return globalFunctionCatalog.getWindowFunctionImplementation(
@@ -233,61 +174,6 @@ public class FunctionManager
     {
         if (!check) {
             throw new TrinoException(FUNCTION_IMPLEMENTATION_ERROR, format(message, args));
-        }
-    }
-
-    private static class FunctionKey
-    {
-        private final FunctionId functionId;
-        private final BoundSignature boundSignature;
-        private final Optional<InvocationConvention> invocationConvention;
-
-        public FunctionKey(ResolvedFunction resolvedFunction)
-        {
-            this(resolvedFunction.getFunctionId(), resolvedFunction.getSignature(), Optional.empty());
-        }
-
-        public FunctionKey(ResolvedFunction resolvedFunction, InvocationConvention invocationConvention)
-        {
-            this(resolvedFunction.getFunctionId(), resolvedFunction.getSignature(), Optional.of(invocationConvention));
-        }
-
-        public FunctionKey(FunctionId functionId, BoundSignature boundSignature, Optional<InvocationConvention> invocationConvention)
-        {
-            this.functionId = requireNonNull(functionId, "functionId is null");
-            this.boundSignature = requireNonNull(boundSignature, "boundSignature is null");
-            this.invocationConvention = requireNonNull(invocationConvention, "invocationConvention is null");
-        }
-
-        @Override
-        public boolean equals(Object o)
-        {
-            if (this == o) {
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-            FunctionKey that = (FunctionKey) o;
-            return functionId.equals(that.functionId) &&
-                    boundSignature.equals(that.boundSignature) &&
-                    invocationConvention.equals(that.invocationConvention);
-        }
-
-        @Override
-        public int hashCode()
-        {
-            return Objects.hash(functionId, boundSignature, invocationConvention);
-        }
-
-        @Override
-        public String toString()
-        {
-            return toStringHelper(this).omitNullValues()
-                    .add("functionId", functionId)
-                    .add("boundSignature", boundSignature)
-                    .add("invocationConvention", invocationConvention.orElse(null))
-                    .toString();
         }
     }
 
