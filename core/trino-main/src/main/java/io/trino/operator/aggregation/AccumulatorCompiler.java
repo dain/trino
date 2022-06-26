@@ -41,6 +41,7 @@ import io.trino.spi.function.AccumulatorStateFactory;
 import io.trino.spi.function.AccumulatorStateSerializer;
 import io.trino.spi.function.GroupedAccumulatorState;
 import io.trino.spi.function.WindowIndex;
+import io.trino.spi.type.Type;
 import io.trino.sql.gen.Binding;
 import io.trino.sql.gen.CallSiteBinder;
 import io.trino.sql.gen.CompilerOperations;
@@ -111,9 +112,14 @@ public final class AccumulatorCompiler
                 argumentNullable,
                 classLoader);
 
+        List<Type> intermediateTypes = metadata.getAccumulatorStateDescriptors().stream()
+                .map(stateDescriptor -> stateDescriptor.getSerializer().getSerializedType())
+                .collect(toImmutableList());
+
         return new CompiledAccumulatorFactory(
                 accumulatorConstructor,
                 groupedAccumulatorConstructor,
+                intermediateTypes,
                 metadata.getLambdaInterfaces());
     }
 

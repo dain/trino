@@ -65,6 +65,12 @@ public class OrderedAccumulatorFactory
     }
 
     @Override
+    public List<Type> getIntermediateTypes()
+    {
+        return delegate.getIntermediateTypes();
+    }
+
+    @Override
     public List<Class<?>> getLambdaInterfaces()
     {
         return delegate.getLambdaInterfaces();

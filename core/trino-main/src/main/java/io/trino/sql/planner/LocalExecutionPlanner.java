@@ -1506,7 +1506,6 @@ public class LocalExecutionPlanner
                     boolean classifierInvolved = false;
 
                     ResolvedFunction resolvedFunction = pointer.getFunction();
-                    AggregationMetadata aggregationMetadata = plannerContext.getFunctionManager().getAggregateFunctionImplementation(pointer.getFunction());
 
                     ImmutableList.Builder<Map.Entry<Expression, Type>> builder = ImmutableList.builder();
                     List<Type> signatureTypes = resolvedFunction.getSignature().getArgumentTypes();
@@ -1526,9 +1525,6 @@ public class LocalExecutionPlanner
                             .filter(FunctionType.class::isInstance)
                             .map(FunctionType.class::cast)
                             .collect(toImmutableList());
-
-                    // TODO when we support lambda arguments: lambda cannot have runtime-evaluated symbols -- add check in the Analyzer
-                    List<Supplier<Object>> lambdaProviders = makeLambdaProviders(lambdaExpressions, aggregationMetadata.getLambdaInterfaces(), functionTypes);
 
                     // handle non-lambda arguments
                     List<Integer> valueChannels = new ArrayList<>();
@@ -1576,8 +1572,12 @@ public class LocalExecutionPlanner
                             new FunctionKey(resolvedFunction.getFunctionId(), resolvedFunction.getSignature()),
                             () -> new AggregationWindowFunctionSupplier(
                                     resolvedFunction.getSignature(),
-                                    aggregationMetadata,
+                                    plannerContext.getFunctionManager().getAggregateFunctionImplementation(pointer.getFunction()),
                                     resolvedFunction.getFunctionNullability()));
+
+                    // TODO when we support lambda arguments: lambda cannot have runtime-evaluated symbols -- add check in the Analyzer
+                    List<Supplier<Object>> lambdaProviders = makeLambdaProviders(lambdaExpressions, aggregationWindowFunctionSupplier.getLambdaInterfaces(), functionTypes);
+
                     matchAggregations.add(new MatchAggregationInstantiator(
                             resolvedFunction.getSignature(),
                             aggregationWindowFunctionSupplier,
@@ -3579,13 +3579,12 @@ public class LocalExecutionPlanner
             }
 
             ResolvedFunction resolvedFunction = aggregation.getResolvedFunction();
-            AggregationMetadata aggregationMetadata = plannerContext.getFunctionManager().getAggregateFunctionImplementation(aggregation.getResolvedFunction());
             AccumulatorFactory accumulatorFactory = uncheckedCacheGet(
                     accumulatorFactoryCache,
                     new FunctionKey(resolvedFunction.getFunctionId(), resolvedFunction.getSignature()),
                     () -> generateAccumulatorFactory(
                             resolvedFunction.getSignature(),
-                            aggregationMetadata,
+                            plannerContext.getFunctionManager().getAggregateFunctionImplementation(aggregation.getResolvedFunction()),
                             resolvedFunction.getFunctionNullability()));
 
             if (aggregation.isDistinct()) {
@@ -3632,9 +3631,7 @@ public class LocalExecutionPlanner
                         pagesIndexFactory);
             }
 
-            ImmutableList<Type> intermediateTypes = aggregationMetadata.getAccumulatorStateDescriptors().stream()
-                    .map(stateDescriptor -> stateDescriptor.getSerializer().getSerializedType())
-                    .collect(toImmutableList());
+            List<Type> intermediateTypes = accumulatorFactory.getIntermediateTypes();
             Type intermediateType = (intermediateTypes.size() == 1) ? getOnlyElement(intermediateTypes) : RowType.anonymous(intermediateTypes);
             Type finalType = resolvedFunction.getSignature().getReturnType();
 
@@ -3650,7 +3647,7 @@ public class LocalExecutionPlanner
                     .filter(FunctionType.class::isInstance)
                     .map(FunctionType.class::cast)
                     .collect(toImmutableList());
-            List<Supplier<Object>> lambdaProviders = makeLambdaProviders(lambdaExpressions, aggregationMetadata.getLambdaInterfaces(), functionTypes);
+            List<Supplier<Object>> lambdaProviders = makeLambdaProviders(lambdaExpressions, accumulatorFactory.getLambdaInterfaces(), functionTypes);
 
             return new AggregatorFactory(
                     accumulatorFactory,
