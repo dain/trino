@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.inject.Module;
 import io.airlift.log.Logger;
 import io.airlift.log.Logging;
+import io.airlift.units.Duration;
 import io.trino.Session;
 import io.trino.metadata.QualifiedObjectName;
 import io.trino.plugin.hive.fs.DirectoryLister;
@@ -390,11 +391,12 @@ public final class HiveQueryRunner
         }
 
         DistributedQueryRunner queryRunner = HiveQueryRunner.builder()
+                .setNodeCount(1)
                 .setExtraProperties(ImmutableMap.of("http-server.http.port", "8080"))
                 .setSkipTimezoneSetup(true)
                 .setHiveProperties(ImmutableMap.of())
-                .setInitialTables(TpchTable.getTables())
-                .setBaseDataDir(baseDataDir)
+//                .setInitialTables(TpchTable.getTables())
+                .setBaseDataDir(Optional.of(Paths.get(System.getProperty("user.home"))))
                 .setTpcdsCatalogEnabled(true)
                 .setSecurity(ALLOW_ALL)
                 // Uncomment to enable standard column naming (column names to be prefixed with the first letter of the table name, e.g.: o_orderkey vs orderkey)
@@ -405,5 +407,40 @@ public final class HiveQueryRunner
         Thread.sleep(10);
         log.info("======== SERVER STARTED ========");
         log.info("\n====\n%s\n====", queryRunner.getCoordinator().getBaseUrl());
+
+        // run test over part of web_sales data:
+        //     create table hive.test.web_sales as select ws_ship_mode_sk from tpcds.sf1000.web_sales;
+        //
+        // You may need to adjust the loop counts to your machine
+        //
+        // comment this out if you want to just start the server
+
+        // WARMUP
+        for (int i = 0; i < 17; i++) {
+            long start = System.nanoTime();
+            queryRunner.execute("select max(ws_ship_mode_sk) from hive.test.web_sales");
+            Duration duration = nanosSince(start);
+            if (duration.compareTo(Duration.valueOf("5s")) > 0) {
+                throw new Exception("FAILED WARMUP!!!! " + duration);
+            }
+        }
+
+        // MEASURE
+        // this must occur after the second message like:
+        //    io.trino.sql.planner.LocalExecutionPlanner	Compiling: FunctionKey{functionId=max<t:orderable>(t):t, boundSignature=max(bigint):bigint}
+        // If not adjust the number of warmup queries
+        log.error("****************** MEASURING");
+        long start = System.nanoTime();
+        for (int i = 0; i < 2; i++) {
+            queryRunner.execute("select max(ws_ship_mode_sk) from hive.test.web_sales");
+        }
+        Duration duration = nanosSince(start);
+        log.error("****************** TEST time = %s", duration);
+        if (duration.compareTo(Duration.valueOf("5s")) > 0) {
+            throw new Exception("FAILED!");
+        }
+
+        // Kill vm quickly
+        Runtime.getRuntime().halt(0);
     }
 }

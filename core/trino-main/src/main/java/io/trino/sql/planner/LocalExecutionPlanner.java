@@ -361,7 +361,7 @@ import static io.trino.util.SpatialJoinUtils.extractSupportedSpatialComparisons;
 import static io.trino.util.SpatialJoinUtils.extractSupportedSpatialFunctions;
 import static java.util.Collections.nCopies;
 import static java.util.Objects.requireNonNull;
-import static java.util.concurrent.TimeUnit.HOURS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static java.util.stream.Collectors.partitioningBy;
 import static java.util.stream.IntStream.range;
 
@@ -401,10 +401,10 @@ public class LocalExecutionPlanner
 
     private final NonEvictableCache<FunctionKey, AccumulatorFactory> accumulatorFactoryCache = buildNonEvictableCache(CacheBuilder.newBuilder()
             .maximumSize(1000)
-            .expireAfterWrite(1, HOURS));
+            .expireAfterWrite(30, SECONDS));
     private final NonEvictableCache<FunctionKey, AggregationWindowFunctionSupplier> aggregationWindowFunctionSupplierCache = buildNonEvictableCache(CacheBuilder.newBuilder()
             .maximumSize(1000)
-            .expireAfterWrite(1, HOURS));
+            .expireAfterWrite(30, SECONDS));
 
     @Inject
     public LocalExecutionPlanner(
@@ -3579,13 +3579,17 @@ public class LocalExecutionPlanner
             }
 
             ResolvedFunction resolvedFunction = aggregation.getResolvedFunction();
+            FunctionKey key = new FunctionKey(resolvedFunction.getFunctionId(), resolvedFunction.getSignature());
             AccumulatorFactory accumulatorFactory = uncheckedCacheGet(
                     accumulatorFactoryCache,
-                    new FunctionKey(resolvedFunction.getFunctionId(), resolvedFunction.getSignature()),
-                    () -> generateAccumulatorFactory(
-                            resolvedFunction.getSignature(),
-                            plannerContext.getFunctionManager().getAggregateFunctionImplementation(aggregation.getResolvedFunction()),
-                            resolvedFunction.getFunctionNullability()));
+                    key,
+                    () -> {
+                        log.error("Compiling: " + key);
+                        return generateAccumulatorFactory(
+                                resolvedFunction.getSignature(),
+                                plannerContext.getFunctionManager().getAggregateFunctionImplementation(aggregation.getResolvedFunction()),
+                                resolvedFunction.getFunctionNullability());
+                    });
 
             if (aggregation.isDistinct()) {
                 accumulatorFactory = new DistinctAccumulatorFactory(
