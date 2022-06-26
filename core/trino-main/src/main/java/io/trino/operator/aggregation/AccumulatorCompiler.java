@@ -42,6 +42,7 @@ import io.trino.spi.function.BoundSignature;
 import io.trino.spi.function.FunctionNullability;
 import io.trino.spi.function.GroupedAccumulatorState;
 import io.trino.spi.function.WindowIndex;
+import io.trino.spi.type.Type;
 import io.trino.sql.gen.Binding;
 import io.trino.sql.gen.CallSiteBinder;
 import io.trino.sql.gen.CompilerOperations;
@@ -112,9 +113,14 @@ public final class AccumulatorCompiler
                 argumentNullable,
                 classLoader);
 
+        List<Type> intermediateTypes = implementation.getAccumulatorStateDescriptors().stream()
+                .map(stateDescriptor -> stateDescriptor.getSerializer().getSerializedType())
+                .collect(toImmutableList());
+
         return new CompiledAccumulatorFactory(
                 accumulatorConstructor,
                 groupedAccumulatorConstructor,
+                intermediateTypes,
                 implementation.getLambdaInterfaces());
     }
 

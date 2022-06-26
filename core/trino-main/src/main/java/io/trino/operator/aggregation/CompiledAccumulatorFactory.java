@@ -14,6 +14,7 @@
 package io.trino.operator.aggregation;
 
 import com.google.common.collect.ImmutableList;
+import io.trino.spi.type.Type;
 
 import java.lang.reflect.Constructor;
 import java.util.List;
@@ -26,16 +27,25 @@ public class CompiledAccumulatorFactory
 {
     private final Constructor<? extends Accumulator> accumulatorConstructor;
     private final Constructor<? extends GroupedAccumulator> groupedAccumulatorConstructor;
+    private final List<Type> intermediateTypes;
     private final List<Class<?>> lambdaInterfaces;
 
     public CompiledAccumulatorFactory(
             Constructor<? extends Accumulator> accumulatorConstructor,
             Constructor<? extends GroupedAccumulator> groupedAccumulatorConstructor,
+            List<Type> intermediateTypes,
             List<Class<?>> lambdaInterfaces)
     {
         this.accumulatorConstructor = requireNonNull(accumulatorConstructor, "accumulatorConstructor is null");
         this.groupedAccumulatorConstructor = requireNonNull(groupedAccumulatorConstructor, "groupedAccumulatorConstructor is null");
+        this.intermediateTypes = ImmutableList.copyOf(requireNonNull(intermediateTypes, "intermediateTypes is null"));
         this.lambdaInterfaces = ImmutableList.copyOf(requireNonNull(lambdaInterfaces, "lambdaInterfaces is null"));
+    }
+
+    @Override
+    public List<Type> getIntermediateTypes()
+    {
+        return intermediateTypes;
     }
 
     @Override
