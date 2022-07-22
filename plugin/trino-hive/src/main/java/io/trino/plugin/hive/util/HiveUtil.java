@@ -37,6 +37,9 @@ import io.trino.plugin.hive.avro.TrinoAvroSerDe;
 import io.trino.plugin.hive.metastore.Column;
 import io.trino.plugin.hive.metastore.SortingColumn;
 import io.trino.plugin.hive.metastore.Table;
+import io.trino.plugin.hive.text.LineDataSource;
+import io.trino.plugin.hive.text.LineRecordReader;
+import io.trino.plugin.hive.text.TextHiveRecordReader;
 import io.trino.spi.ErrorCodeSupplier;
 import io.trino.spi.TrinoException;
 import io.trino.spi.predicate.NullableValue;
@@ -296,6 +299,10 @@ public final class HiveUtil
     private static HiveRecordReader createHiveRecordReader(Configuration configuration, long length, Properties schema, JobConf jobConf, FileSplit fileSplit)
             throws IOException
     {
+        if (getInputFormatName(schema).equals(TextInputFormat.class.getName())) {
+            return new TextHiveRecordReader(new LineRecordReader(jobConf, new LineDataSource(jobConf, fileSplit)));
+        }
+
         InputFormat<?, ?> inputFormat = getInputFormat(configuration, schema, true);
         @SuppressWarnings("unchecked")
         RecordReader<?, ? extends Writable> recordReader = (RecordReader<?, ? extends Writable>) inputFormat.getRecordReader(fileSplit, jobConf, Reporter.NULL);
