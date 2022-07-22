@@ -47,16 +47,15 @@ import org.apache.hadoop.io.BinaryComparable;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
-import org.apache.hadoop.mapred.RecordReader;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.Properties;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 import static io.trino.plugin.base.type.TrinoTimestampEncoderFactory.createTimestampEncoder;
 import static io.trino.plugin.base.util.Closables.closeAllSuppress;
@@ -80,19 +79,15 @@ import static io.trino.spi.type.TinyintType.TINYINT;
 import static io.trino.spi.type.VarbinaryType.VARBINARY;
 import static io.trino.spi.type.Varchars.truncateToLength;
 import static java.lang.Float.floatToRawIntBits;
-import static java.lang.Math.max;
-import static java.lang.Math.min;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 import static org.joda.time.DateTimeZone.UTC;
 
-public class GenericHiveRecordCursor<K, V extends Writable>
+public class GenericHiveRecordCursor
         implements RecordCursor
 {
     private final Path path;
-    private final RecordReader<K, V> recordReader;
-    private final K key;
-    private final V value;
+    private final HiveRecordReader recordReader;
 
     private final Deserializer deserializer;
 
@@ -112,31 +107,23 @@ public class GenericHiveRecordCursor<K, V extends Writable>
     private final boolean[] nulls;
     private final TrinoTimestampEncoder<?>[] timestampEncoders;
 
-    private final long totalBytes;
-
-    private long completedBytes;
     private Object rowData;
     private boolean closed;
 
     public GenericHiveRecordCursor(
             Configuration configuration,
             Path path,
-            RecordReader<K, V> recordReader,
-            long totalBytes,
+            HiveRecordReader recordReader,
             Properties splitSchema,
             List<HiveColumnHandle> columns)
     {
         requireNonNull(path, "path is null");
         requireNonNull(recordReader, "recordReader is null");
-        checkArgument(totalBytes >= 0, "totalBytes is negative");
         requireNonNull(splitSchema, "splitSchema is null");
         requireNonNull(columns, "columns is null");
 
         this.path = path;
         this.recordReader = recordReader;
-        this.totalBytes = totalBytes;
-        this.key = recordReader.createKey();
-        this.value = recordReader.createValue();
 
         this.deserializer = getDeserializer(configuration, splitSchema);
         this.rowInspector = getTableObjectInspector(deserializer);
@@ -179,27 +166,13 @@ public class GenericHiveRecordCursor<K, V extends Writable>
     @Override
     public long getCompletedBytes()
     {
-        if (!closed) {
-            updateCompletedBytes();
-        }
-        return completedBytes;
+        return recordReader.getCompletedBytes();
     }
 
     @Override
     public long getReadTimeNanos()
     {
         return 0;
-    }
-
-    private void updateCompletedBytes()
-    {
-        try {
-            @SuppressWarnings("NumericCastThatLosesPrecision")
-            long newCompletedBytes = (long) (totalBytes * recordReader.getProgress());
-            completedBytes = min(totalBytes, max(completedBytes, newCompletedBytes));
-        }
-        catch (IOException ignored) {
-        }
     }
 
     @Override
@@ -212,7 +185,12 @@ public class GenericHiveRecordCursor<K, V extends Writable>
     public boolean advanceNextPosition()
     {
         try {
-            if (closed || !recordReader.next(key, value)) {
+            if (closed) {
+                return false;
+            }
+
+            Optional<Writable> value = recordReader.next();
+            if (value.isEmpty()) {
                 close();
                 return false;
             }
@@ -221,7 +199,7 @@ public class GenericHiveRecordCursor<K, V extends Writable>
             Arrays.fill(loaded, false);
 
             // decode value
-            rowData = deserializer.deserialize(value);
+            rowData = deserializer.deserialize(value.get());
 
             return true;
         }
@@ -575,8 +553,6 @@ public class GenericHiveRecordCursor<K, V extends Writable>
             return;
         }
         closed = true;
-
-        updateCompletedBytes();
 
         try {
             recordReader.close();

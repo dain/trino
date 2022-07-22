@@ -14,6 +14,7 @@
 package io.trino.plugin.hive.s3select;
 
 import com.google.common.collect.ImmutableSet;
+import io.trino.plugin.hive.GenericHiveRecordReader;
 import io.trino.plugin.hive.HdfsEnvironment;
 import io.trino.plugin.hive.HiveColumnHandle;
 import io.trino.plugin.hive.HiveRecordCursorProvider;
@@ -95,7 +96,12 @@ public class S3SelectRecordCursorProvider
             String ionSqlQuery = queryBuilder.buildSql(readerColumns, effectivePredicate);
             S3SelectLineRecordReader recordReader = new S3SelectCsvRecordReader(configuration, path, start, length, schema, ionSqlQuery, s3ClientFactory);
 
-            RecordCursor cursor = new S3SelectRecordCursor<>(configuration, path, recordReader, length, schema, readerColumns);
+            RecordCursor cursor = new S3SelectRecordCursor(
+                    configuration,
+                    path,
+                    new GenericHiveRecordReader<>(recordReader, length),
+                    schema,
+                    readerColumns);
             return Optional.of(new ReaderRecordCursorWithProjections(cursor, projectedReaderColumns));
         }
 

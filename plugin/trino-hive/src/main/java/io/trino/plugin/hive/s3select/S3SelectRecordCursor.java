@@ -16,10 +16,9 @@ package io.trino.plugin.hive.s3select;
 import com.google.common.annotations.VisibleForTesting;
 import io.trino.plugin.hive.GenericHiveRecordCursor;
 import io.trino.plugin.hive.HiveColumnHandle;
+import io.trino.plugin.hive.HiveRecordReader;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.Writable;
-import org.apache.hadoop.mapred.RecordReader;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,8 +35,8 @@ import static org.apache.hadoop.hive.serde.serdeConstants.LIST_COLUMNS;
 import static org.apache.hadoop.hive.serde.serdeConstants.LIST_COLUMN_TYPES;
 import static org.apache.hadoop.hive.serde.serdeConstants.SERIALIZATION_DDL;
 
-class S3SelectRecordCursor<K, V extends Writable>
-        extends GenericHiveRecordCursor<K, V>
+class S3SelectRecordCursor
+        extends GenericHiveRecordCursor
 {
     private static final String THRIFT_STRUCT = "struct";
     private static final String START_STRUCT = "{";
@@ -47,12 +46,11 @@ class S3SelectRecordCursor<K, V extends Writable>
     public S3SelectRecordCursor(
             Configuration configuration,
             Path path,
-            RecordReader<K, V> recordReader,
-            long totalBytes,
+            HiveRecordReader recordReader,
             Properties splitSchema,
             List<HiveColumnHandle> columns)
     {
-        super(configuration, path, recordReader, totalBytes, updateSplitSchema(splitSchema, columns), columns);
+        super(configuration, path, recordReader, updateSplitSchema(splitSchema, columns), columns);
     }
 
     // since s3select only returns the required column, not the whole columns

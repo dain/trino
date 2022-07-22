@@ -25,8 +25,11 @@ import io.airlift.slice.SliceUtf8;
 import io.airlift.slice.Slices;
 import io.trino.hadoop.TextLineLengthLimitExceededException;
 import io.trino.orc.OrcWriterOptions;
+import io.trino.plugin.hive.FooterAwareHiveRecordReader;
+import io.trino.plugin.hive.GenericHiveRecordReader;
 import io.trino.plugin.hive.HiveColumnHandle;
 import io.trino.plugin.hive.HivePartitionKey;
+import io.trino.plugin.hive.HiveRecordReader;
 import io.trino.plugin.hive.HiveStorageFormat;
 import io.trino.plugin.hive.HiveTimestampPrecision;
 import io.trino.plugin.hive.HiveType;
@@ -51,7 +54,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.JavaUtils;
-import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.io.IOConstants;
 import org.apache.hadoop.hive.ql.io.SymlinkTextInputFormat;
 import org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat;
@@ -64,7 +66,6 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
 import org.apache.hadoop.io.Writable;
-import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.mapred.FileSplit;
@@ -224,7 +225,14 @@ public final class HiveUtil
     {
     }
 
-    public static RecordReader<?, ?> createRecordReader(Configuration configuration, Path path, long start, long length, Properties schema, List<HiveColumnHandle> columns)
+    public static HiveRecordReader createRecordReader(
+            Configuration configuration,
+            Path path,
+            long start,
+            long length,
+            long fileSize,
+            Properties schema,
+            List<HiveColumnHandle> columns)
     {
         // determine which hive columns we will read
         List<HiveColumnHandle> readColumns = columns.stream()
@@ -242,7 +250,6 @@ public final class HiveUtil
         configuration = copy(configuration);
         setReadColumns(configuration, readHiveColumnIndexes);
 
-        InputFormat<?, ?> inputFormat = getInputFormat(configuration, schema, true);
         JobConf jobConf = toJobConf(configuration);
         FileSplit fileSplit = new FileSplit(path, start, length, (String[]) null);
 
@@ -254,18 +261,19 @@ public final class HiveUtil
         configureCompressionCodecs(jobConf);
 
         try {
-            @SuppressWarnings({"rawtypes", "unchecked"}) // raw type on WritableComparable can't be fixed because Utilities#skipHeader takes them raw
-            RecordReader<WritableComparable, Writable> recordReader = (RecordReader<WritableComparable, Writable>) inputFormat.getRecordReader(fileSplit, jobConf, Reporter.NULL);
+            HiveRecordReader recordReader = createHiveRecordReader(configuration, length, schema, jobConf, fileSplit);
 
             int headerCount = getHeaderCount(schema);
             //  Only skip header rows when the split is at the beginning of the file
-            if (start == 0 && headerCount > 0) {
-                Utilities.skipHeader(recordReader, headerCount, recordReader.createKey(), recordReader.createValue());
+            if (headerCount > 0) {
+                checkArgument(fileSize == start + length, "Footer not supported for a split file");
+                skipHeader(recordReader, headerCount);
             }
 
             int footerCount = getFooterCount(schema);
             if (footerCount > 0) {
-                recordReader = new FooterAwareRecordReader<>(recordReader, footerCount, jobConf);
+                checkArgument(fileSize == start + length, "Footer not supported for a split file");
+                recordReader = new FooterAwareHiveRecordReader(recordReader, footerCount);
             }
 
             return recordReader;
@@ -282,6 +290,25 @@ public final class HiveUtil
                     getInputFormatName(schema),
                     firstNonNull(e.getMessage(), e.getClass().getName())),
                     e);
+        }
+    }
+
+    private static HiveRecordReader createHiveRecordReader(Configuration configuration, long length, Properties schema, JobConf jobConf, FileSplit fileSplit)
+            throws IOException
+    {
+        InputFormat<?, ?> inputFormat = getInputFormat(configuration, schema, true);
+        @SuppressWarnings("unchecked")
+        RecordReader<?, ? extends Writable> recordReader = (RecordReader<?, ? extends Writable>) inputFormat.getRecordReader(fileSplit, jobConf, Reporter.NULL);
+        return new GenericHiveRecordReader<>(recordReader, length);
+    }
+
+    private static void skipHeader(HiveRecordReader recordReader, int headerCount)
+            throws IOException
+    {
+        for (int i = 0; i < headerCount; i++) {
+            if (recordReader.next().isEmpty()) {
+                return;
+            }
         }
     }
 

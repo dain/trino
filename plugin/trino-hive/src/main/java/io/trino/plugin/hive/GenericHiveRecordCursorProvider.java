@@ -14,7 +14,6 @@
 package io.trino.plugin.hive;
 
 import io.airlift.units.DataSize;
-import io.trino.plugin.hive.util.HiveUtil;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.ConnectorSession;
 import io.trino.spi.connector.RecordCursor;
@@ -22,8 +21,6 @@ import io.trino.spi.predicate.TupleDomain;
 import io.trino.spi.type.TypeManager;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.Writable;
-import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapreduce.lib.input.LineRecordReader;
 
 import javax.inject.Inject;
@@ -36,6 +33,7 @@ import java.util.Properties;
 import static com.google.common.base.Preconditions.checkArgument;
 import static io.trino.plugin.hive.HiveErrorCode.HIVE_FILESYSTEM_ERROR;
 import static io.trino.plugin.hive.HivePageSourceProvider.projectBaseColumns;
+import static io.trino.plugin.hive.util.HiveUtil.createRecordReader;
 import static java.lang.Math.toIntExact;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toUnmodifiableList;
@@ -92,42 +90,33 @@ public class GenericHiveRecordCursorProvider
                 .orElse(columns);
 
         RecordCursor cursor = hdfsEnvironment.doAs(session.getIdentity(), () -> {
-            RecordReader<?, ?> recordReader = HiveUtil.createRecordReader(
+            HiveRecordReader recordReader = createRecordReader(
                     configuration,
                     path,
                     start,
                     length,
+                    fileSize,
                     schema,
                     readerColumns);
-
             try {
-                return new GenericHiveRecordCursor<>(
+                return new GenericHiveRecordCursor(
                         configuration,
                         path,
-                        genericRecordReader(recordReader),
-                        length,
+                        recordReader,
                         schema,
                         readerColumns);
             }
-            catch (Exception e) {
+            catch (RuntimeException e) {
                 try {
                     recordReader.close();
                 }
                 catch (IOException closeException) {
-                    if (e != closeException) {
-                        e.addSuppressed(closeException);
-                    }
+                    e.addSuppressed(closeException);
                 }
                 throw e;
             }
         });
 
         return Optional.of(new ReaderRecordCursorWithProjections(cursor, projections));
-    }
-
-    @SuppressWarnings("unchecked")
-    private static RecordReader<?, ? extends Writable> genericRecordReader(RecordReader<?, ?> recordReader)
-    {
-        return (RecordReader<?, ? extends Writable>) recordReader;
     }
 }
