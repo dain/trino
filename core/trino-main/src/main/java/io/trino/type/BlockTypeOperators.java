@@ -23,6 +23,7 @@ import io.trino.spi.type.Type;
 import io.trino.spi.type.TypeOperators;
 import org.weakref.jmx.Managed;
 
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.inject.Inject;
 
@@ -55,6 +56,7 @@ public final class BlockTypeOperators
     private static final InvocationConvention ORDERING_CONVENTION = simpleConvention(FAIL_ON_NULL, BLOCK_POSITION, BLOCK_POSITION);
     private static final InvocationConvention LESS_THAN_CONVENTION = simpleConvention(FAIL_ON_NULL, BLOCK_POSITION, BLOCK_POSITION);
 
+    @Nullable
     private final NonKeyEvictableCache<GeneratedBlockOperatorKey<?>, GeneratedBlockOperator<?>> generatedBlockOperatorCache;
     private final TypeOperators typeOperators;
 
@@ -66,11 +68,22 @@ public final class BlockTypeOperators
     @Inject
     public BlockTypeOperators(TypeOperators typeOperators)
     {
+        this(typeOperators, buildNonEvictableCacheWithWeakInvalidateAll(CacheBuilder.newBuilder()
+                .maximumSize(10_000)
+                .expireAfterWrite(2, TimeUnit.HOURS)));
+    }
+
+    public static BlockTypeOperators createUncached(TypeOperators typeOperators)
+    {
+        return new BlockTypeOperators(typeOperators, null);
+    }
+
+    private BlockTypeOperators(
+            TypeOperators typeOperators,
+            @Nullable NonKeyEvictableCache<GeneratedBlockOperatorKey<?>, GeneratedBlockOperator<?>> generatedBlockOperatorCache)
+    {
         this.typeOperators = requireNonNull(typeOperators, "typeOperators is null");
-        this.generatedBlockOperatorCache = buildNonEvictableCacheWithWeakInvalidateAll(
-                CacheBuilder.newBuilder()
-                        .maximumSize(10_000)
-                        .expireAfterWrite(2, TimeUnit.HOURS));
+        this.generatedBlockOperatorCache = generatedBlockOperatorCache;
     }
 
     public BlockPositionEqual getEqualOperator(Type type)
@@ -173,6 +186,9 @@ public final class BlockTypeOperators
 
     private <T> T getBlockOperator(Type type, Class<T> operatorInterface, Supplier<MethodHandle> methodHandleSupplier, Optional<Object> additionalKey)
     {
+        if (generatedBlockOperatorCache == null) {
+            return new GeneratedBlockOperator<>(type, operatorInterface, methodHandleSupplier.get()).get();
+        }
         try {
             @SuppressWarnings("unchecked")
             GeneratedBlockOperator<T> generatedBlockOperator = (GeneratedBlockOperator<T>) uncheckedCacheGet(
@@ -262,32 +278,34 @@ public final class BlockTypeOperators
     @Managed
     public long cacheSize()
     {
-        return generatedBlockOperatorCache.size();
+        return generatedBlockOperatorCache == null ? 0 : generatedBlockOperatorCache.size();
     }
 
     @Managed
     public Double getCacheHitRate()
     {
-        return generatedBlockOperatorCache.stats().hitRate();
+        return generatedBlockOperatorCache == null ? 0 : generatedBlockOperatorCache.stats().hitRate();
     }
 
     @Managed
     public Double getCacheMissRate()
     {
-        return generatedBlockOperatorCache.stats().missRate();
+        return generatedBlockOperatorCache == null ? 1 : generatedBlockOperatorCache.stats().missRate();
     }
 
     @Managed
     public long getCacheRequestCount()
     {
-        return generatedBlockOperatorCache.stats().requestCount();
+        return generatedBlockOperatorCache == null ? 0 : generatedBlockOperatorCache.stats().requestCount();
     }
 
     @Managed
     public void cacheReset()
     {
-        // Note: this may not invalidate ongoing loads (https://github.com/trinodb/trino/issues/10512, https://github.com/google/guava/issues/1881)
-        // This is acceptable, since this operation is invoked manually, and not relied upon for correctness.
-        generatedBlockOperatorCache.invalidateAll();
+        if (generatedBlockOperatorCache != null) {
+            // Note: this may not invalidate ongoing loads (https://github.com/trinodb/trino/issues/10512, https://github.com/google/guava/issues/1881)
+            // This is acceptable, since this operation is invoked manually, and not relied upon for correctness.
+            generatedBlockOperatorCache.invalidateAll();
+        }
     }
 }
