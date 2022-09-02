@@ -354,8 +354,11 @@ public final class SystemFunctionBundle
 {
     private SystemFunctionBundle() {}
 
-    public static FunctionBundle create(FeaturesConfig featuresConfig, TypeOperators typeOperators, BlockTypeOperators blockTypeOperators, NodeVersion nodeVersion)
+    public static FunctionBundle create(FeaturesConfig featuresConfig, NodeVersion nodeVersion)
     {
+        TypeOperators typeOperators = new TypeOperators((key, supplier) -> supplier.get());
+        BlockTypeOperators blockTypeOperators = BlockTypeOperators.createUncached(typeOperators);
+
         InternalFunctionBundleBuilder builder = InternalFunctionBundle.builder()
                 .window(RowNumberFunction.class)
                 .window(RankFunction.class)

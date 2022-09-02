@@ -29,10 +29,8 @@ import io.trino.spi.function.TypeVariableConstraint;
 import io.trino.spi.type.ArrayType;
 import io.trino.spi.type.StandardTypes;
 import io.trino.spi.type.Type;
-import io.trino.spi.type.TypeOperators;
 import io.trino.spi.type.TypeSignature;
 import io.trino.sql.tree.QualifiedName;
-import io.trino.type.BlockTypeOperators;
 import io.trino.type.UnknownType;
 import org.testng.annotations.Test;
 
@@ -102,9 +100,8 @@ public class TestGlobalFunctionCatalog
     {
         FunctionBundle functionBundle = extractFunctions(CustomAdd.class);
 
-        TypeOperators typeOperators = new TypeOperators();
         GlobalFunctionCatalog globalFunctionCatalog = new GlobalFunctionCatalog();
-        globalFunctionCatalog.addFunctions(SystemFunctionBundle.create(new FeaturesConfig(), typeOperators, new BlockTypeOperators(typeOperators), NodeVersion.UNKNOWN));
+        globalFunctionCatalog.addFunctions(SystemFunctionBundle.create(new FeaturesConfig(), NodeVersion.UNKNOWN));
         globalFunctionCatalog.addFunctions(functionBundle);
         assertThatThrownBy(() -> globalFunctionCatalog.addFunctions(functionBundle))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -116,9 +113,8 @@ public class TestGlobalFunctionCatalog
     {
         FunctionBundle functions = extractFunctions(ScalarSum.class);
 
-        TypeOperators typeOperators = new TypeOperators();
         GlobalFunctionCatalog globalFunctionCatalog = new GlobalFunctionCatalog();
-        globalFunctionCatalog.addFunctions(SystemFunctionBundle.create(new FeaturesConfig(), typeOperators, new BlockTypeOperators(typeOperators), NodeVersion.UNKNOWN));
+        globalFunctionCatalog.addFunctions(SystemFunctionBundle.create(new FeaturesConfig(), NodeVersion.UNKNOWN));
         assertThatThrownBy(() -> globalFunctionCatalog.addFunctions(functions))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("'sum' is both an aggregation and a scalar function");

@@ -102,7 +102,6 @@ import io.trino.spi.statistics.TableStatisticsMetadata;
 import io.trino.spi.type.Type;
 import io.trino.spi.type.TypeManager;
 import io.trino.spi.type.TypeNotFoundException;
-import io.trino.spi.type.TypeOperators;
 import io.trino.spi.type.TypeSignature;
 import io.trino.sql.SqlPathElement;
 import io.trino.sql.analyzer.TypeSignatureProvider;
@@ -111,7 +110,6 @@ import io.trino.sql.planner.PartitioningHandle;
 import io.trino.sql.tree.Identifier;
 import io.trino.sql.tree.QualifiedName;
 import io.trino.transaction.TransactionManager;
-import io.trino.type.BlockTypeOperators;
 
 import javax.annotation.concurrent.GuardedBy;
 import javax.inject.Inject;
@@ -2670,8 +2668,7 @@ public final class MetadataManager
             GlobalFunctionCatalog globalFunctionCatalog = this.globalFunctionCatalog;
             if (globalFunctionCatalog == null) {
                 globalFunctionCatalog = new GlobalFunctionCatalog();
-                TypeOperators typeOperators = new TypeOperators();
-                globalFunctionCatalog.addFunctions(SystemFunctionBundle.create(new FeaturesConfig(), typeOperators, new BlockTypeOperators(typeOperators), UNKNOWN));
+                globalFunctionCatalog.addFunctions(SystemFunctionBundle.create(new FeaturesConfig(), UNKNOWN));
                 globalFunctionCatalog.addFunctions(new InternalFunctionBundle(new LiteralFunction(new InternalBlockEncodingSerde(new BlockEncodingManager(), typeManager))));
             }
 

@@ -477,9 +477,9 @@ public class ServerMainModule
 
     @ProvidesIntoSet
     @Singleton
-    public static FunctionBundle systemFunctionBundle(FeaturesConfig featuresConfig, TypeOperators typeOperators, BlockTypeOperators blockTypeOperators, NodeVersion nodeVersion)
+    public static FunctionBundle systemFunctionBundle(FeaturesConfig featuresConfig, NodeVersion nodeVersion)
     {
-        return SystemFunctionBundle.create(featuresConfig, typeOperators, blockTypeOperators, nodeVersion);
+        return SystemFunctionBundle.create(featuresConfig, nodeVersion);
     }
 
     @ProvidesIntoSet

@@ -37,7 +37,6 @@ import io.trino.spi.type.TypeManager;
 import io.trino.spi.type.TypeOperators;
 import io.trino.sql.PlannerContext;
 import io.trino.transaction.TransactionManager;
-import io.trino.type.BlockTypeOperators;
 import io.trino.type.InternalTypeManager;
 import io.trino.type.JsonPath2016Type;
 import io.trino.type.TypeDeserializer;
@@ -115,7 +114,7 @@ public final class TestingPlannerContext
             parametricTypes.forEach(typeRegistry::addParametricType);
 
             GlobalFunctionCatalog globalFunctionCatalog = new GlobalFunctionCatalog();
-            globalFunctionCatalog.addFunctions(SystemFunctionBundle.create(featuresConfig, typeOperators, new BlockTypeOperators(typeOperators), UNKNOWN));
+            globalFunctionCatalog.addFunctions(SystemFunctionBundle.create(featuresConfig, UNKNOWN));
             functionBundles.forEach(globalFunctionCatalog::addFunctions);
 
             BlockEncodingSerde blockEncodingSerde = new InternalBlockEncodingSerde(new BlockEncodingManager(), typeManager);

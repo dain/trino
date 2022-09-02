@@ -367,7 +367,7 @@ public class LocalQueryRunner
 
         this.globalFunctionCatalog = new GlobalFunctionCatalog();
         globalFunctionCatalog.addFunctions(new InternalFunctionBundle(new LiteralFunction(blockEncodingSerde)));
-        globalFunctionCatalog.addFunctions(SystemFunctionBundle.create(featuresConfig, typeOperators, blockTypeOperators, nodeManager.getCurrentNode().getNodeVersion()));
+        globalFunctionCatalog.addFunctions(SystemFunctionBundle.create(featuresConfig, nodeManager.getCurrentNode().getNodeVersion()));
         Metadata metadata = metadataProvider.getMetadata(
                 new DisabledSystemSecurityMetadata(),
                 transactionManager,

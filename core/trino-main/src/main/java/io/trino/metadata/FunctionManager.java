@@ -33,8 +33,6 @@ import io.trino.spi.function.InvocationConvention.InvocationArgumentConvention;
 import io.trino.spi.function.ScalarFunctionImplementation;
 import io.trino.spi.function.WindowFunctionSupplier;
 import io.trino.spi.type.Type;
-import io.trino.spi.type.TypeOperators;
-import io.trino.type.BlockTypeOperators;
 
 import javax.inject.Inject;
 
@@ -313,9 +311,8 @@ public class FunctionManager
 
     public static FunctionManager createTestingFunctionManager()
     {
-        TypeOperators typeOperators = new TypeOperators();
         GlobalFunctionCatalog functionCatalog = new GlobalFunctionCatalog();
-        functionCatalog.addFunctions(SystemFunctionBundle.create(new FeaturesConfig(), typeOperators, new BlockTypeOperators(typeOperators), UNKNOWN));
+        functionCatalog.addFunctions(SystemFunctionBundle.create(new FeaturesConfig(), UNKNOWN));
         functionCatalog.addFunctions(new InternalFunctionBundle(new LiteralFunction(new InternalBlockEncodingSerde(new BlockEncodingManager(), TESTING_TYPE_MANAGER))));
         return new FunctionManager(CatalogServiceProvider.fail(), functionCatalog);
     }
