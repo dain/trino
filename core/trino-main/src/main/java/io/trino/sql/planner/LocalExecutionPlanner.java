@@ -423,6 +423,10 @@ public class LocalExecutionPlanner
             .maximumSize(1000)
             .expireAfterWrite(30, SECONDS));
 
+    private final NonEvictableCache<FunctionKey, WindowFunctionSupplier> windowFunctionSupplierCache = buildNonEvictableCache(CacheBuilder.newBuilder()
+            .maximumSize(1000)
+            .expireAfterWrite(30, SECONDS));
+
     @Inject
     public LocalExecutionPlanner(
             Metadata metadata,
@@ -1170,8 +1174,9 @@ public class LocalExecutionPlanner
 
         private WindowFunctionSupplier getWindowFunctionImplementation(ResolvedFunction resolvedFunction)
         {
+            FunctionKey functionKey = new FunctionKey(resolvedFunction.getFunctionId(), resolvedFunction.getSignature());
             if (resolvedFunction.getFunctionKind() == FunctionKind.AGGREGATE) {
-                return uncheckedCacheGet(aggregationWindowFunctionSupplierCache, new FunctionKey(resolvedFunction.getFunctionId(), resolvedFunction.getSignature()), () -> {
+                return uncheckedCacheGet(aggregationWindowFunctionSupplierCache, functionKey, () -> {
                     AggregationImplementation aggregationImplementation = functionManager.getAggregationImplementation(resolvedFunction);
                     return new AggregationWindowFunctionSupplier(
                             resolvedFunction.getSignature(),
@@ -1179,7 +1184,7 @@ public class LocalExecutionPlanner
                             resolvedFunction.getFunctionNullability());
                 });
             }
-            return functionManager.getWindowFunctionSupplier(resolvedFunction);
+            return uncheckedCacheGet(windowFunctionSupplierCache, functionKey, () -> functionManager.getWindowFunctionSupplier(resolvedFunction));
         }
 
         @Override
