@@ -34,6 +34,7 @@ import io.trino.spi.function.ScalarFunctionImplementation;
 import io.trino.spi.function.WindowFunctionSupplier;
 import io.trino.spi.type.Type;
 
+import javax.annotation.Nullable;
 import javax.inject.Inject;
 
 import java.lang.invoke.MethodHandle;
@@ -56,8 +57,11 @@ import static java.util.concurrent.TimeUnit.HOURS;
 
 public class FunctionManager
 {
+    @Nullable
     private final NonEvictableCache<FunctionKey, ScalarFunctionImplementation> specializedScalarCache;
+    @Nullable
     private final NonEvictableCache<FunctionKey, AggregationImplementation> specializedAggregationCache;
+    @Nullable
     private final NonEvictableCache<FunctionKey, WindowFunctionSupplier> specializedWindowCache;
 
     private final CatalogServiceProvider<FunctionProvider> functionProviders;
@@ -66,24 +70,44 @@ public class FunctionManager
     @Inject
     public FunctionManager(CatalogServiceProvider<FunctionProvider> functionProviders, GlobalFunctionCatalog globalFunctionCatalog)
     {
-        specializedScalarCache = buildNonEvictableCache(CacheBuilder.newBuilder()
-                .maximumSize(1000)
-                .expireAfterWrite(1, HOURS));
+        this(functionProviders, globalFunctionCatalog, true);
+    }
 
-        specializedAggregationCache = buildNonEvictableCache(CacheBuilder.newBuilder()
-                .maximumSize(1000)
-                .expireAfterWrite(1, HOURS));
+    private FunctionManager(CatalogServiceProvider<FunctionProvider> functionProviders, GlobalFunctionCatalog globalFunctionCatalog, boolean cacheEnabled)
+    {
+        if (cacheEnabled) {
+            specializedScalarCache = buildNonEvictableCache(CacheBuilder.newBuilder()
+                    .maximumSize(1000)
+                    .expireAfterWrite(1, HOURS));
 
-        specializedWindowCache = buildNonEvictableCache(CacheBuilder.newBuilder()
-                .maximumSize(1000)
-                .expireAfterWrite(1, HOURS));
+            specializedAggregationCache = buildNonEvictableCache(CacheBuilder.newBuilder()
+                    .maximumSize(1000)
+                    .expireAfterWrite(1, HOURS));
+
+            specializedWindowCache = buildNonEvictableCache(CacheBuilder.newBuilder()
+                    .maximumSize(1000)
+                    .expireAfterWrite(1, HOURS));
+        }
+        else {
+            specializedScalarCache = null;
+            specializedAggregationCache = null;
+            specializedWindowCache = null;
+        }
 
         this.functionProviders = requireNonNull(functionProviders, "functionProviders is null");
         this.globalFunctionCatalog = requireNonNull(globalFunctionCatalog, "globalFunctionCatalog is null");
     }
 
+    public FunctionManager withoutCache()
+    {
+        return new FunctionManager(functionProviders, globalFunctionCatalog, false);
+    }
+
     public ScalarFunctionImplementation getScalarFunctionImplementation(ResolvedFunction resolvedFunction, InvocationConvention invocationConvention)
     {
+        if (specializedScalarCache == null) {
+            return getScalarFunctionImplementationInternal(resolvedFunction, invocationConvention);
+        }
         try {
             return uncheckedCacheGet(specializedScalarCache, new FunctionKey(resolvedFunction, invocationConvention), () -> getScalarFunctionImplementationInternal(resolvedFunction, invocationConvention));
         }
@@ -107,6 +131,9 @@ public class FunctionManager
 
     public AggregationImplementation getAggregationImplementation(ResolvedFunction resolvedFunction)
     {
+        if (specializedAggregationCache == null) {
+            return getAggregationImplementationInternal(resolvedFunction);
+        }
         try {
             return uncheckedCacheGet(specializedAggregationCache, new FunctionKey(resolvedFunction), () -> getAggregationImplementationInternal(resolvedFunction));
         }
@@ -127,6 +154,9 @@ public class FunctionManager
 
     public WindowFunctionSupplier getWindowFunctionSupplier(ResolvedFunction resolvedFunction)
     {
+        if (specializedWindowCache == null) {
+            return getWindowFunctionSupplierInternal(resolvedFunction);
+        }
         try {
             return uncheckedCacheGet(specializedWindowCache, new FunctionKey(resolvedFunction), () -> getWindowFunctionSupplierInternal(resolvedFunction));
         }
