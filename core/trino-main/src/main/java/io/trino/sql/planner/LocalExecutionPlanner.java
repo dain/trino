@@ -383,8 +383,6 @@ public class LocalExecutionPlanner
     private static final Logger log = Logger.get(LocalExecutionPlanner.class);
 
     private final Metadata metadata;
-    private final TypeOperators typeOperators;
-    private final BlockTypeOperators blockTypeOperators;
     private final BlockEncodingSerde blockEncodingSerde;
     private final TypeManager typeManager;
     private final FunctionManager functionManager;
@@ -413,7 +411,10 @@ public class LocalExecutionPlanner
     private final DynamicFilterConfig dynamicFilterConfig;
     private final TableExecuteContextManager tableExecuteContextManager;
     private final ExchangeManagerRegistry exchangeManagerRegistry;
-    private final PositionsAppenderFactory positionsAppenderFactory;
+
+    private final TypeOperators typeOperators = new TypeOperators((key, supplier) -> supplier.get());
+    private final BlockTypeOperators blockTypeOperators = BlockTypeOperators.createUncached(typeOperators);
+    private final PositionsAppenderFactory positionsAppenderFactory = new PositionsAppenderFactory(blockTypeOperators);
 
     private final NonEvictableCache<FunctionKey, AccumulatorFactory> accumulatorFactoryCache = buildNonEvictableCache(CacheBuilder.newBuilder()
             .maximumSize(1000)
@@ -425,7 +426,6 @@ public class LocalExecutionPlanner
     @Inject
     public LocalExecutionPlanner(
             Metadata metadata,
-            TypeOperators typeOperators,
             BlockEncodingSerde blockEncodingSerde,
             TypeManager typeManager,
             FunctionManager functionManager,
@@ -449,13 +449,10 @@ public class LocalExecutionPlanner
             OperatorFactories operatorFactories,
             OrderingCompiler orderingCompiler,
             DynamicFilterConfig dynamicFilterConfig,
-            BlockTypeOperators blockTypeOperators,
             TableExecuteContextManager tableExecuteContextManager,
             ExchangeManagerRegistry exchangeManagerRegistry)
     {
         this.metadata = requireNonNull(metadata, "metadata is null");
-        this.typeOperators = requireNonNull(typeOperators, "typeOperators is null");
-        this.blockTypeOperators = requireNonNull(blockTypeOperators, "blockTypeOperators is null");
         this.blockEncodingSerde = requireNonNull(blockEncodingSerde, "blockEncodingSerde is null");
         this.typeManager = requireNonNull(typeManager, "typeManager is null");
         this.functionManager = requireNonNull(functionManager, "functionManager is null");
@@ -484,7 +481,6 @@ public class LocalExecutionPlanner
         this.dynamicFilterConfig = requireNonNull(dynamicFilterConfig, "dynamicFilterConfig is null");
         this.tableExecuteContextManager = requireNonNull(tableExecuteContextManager, "tableExecuteContextManager is null");
         this.exchangeManagerRegistry = requireNonNull(exchangeManagerRegistry, "exchangeManagerRegistry is null");
-        this.positionsAppenderFactory = new PositionsAppenderFactory(blockTypeOperators);
     }
 
     public LocalExecutionPlan plan(

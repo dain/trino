@@ -929,7 +929,6 @@ public class LocalQueryRunner
         tableExecuteContextManager.registerTableExecuteContextForQuery(taskContext.getQueryContext().getQueryId());
         LocalExecutionPlanner executionPlanner = new LocalExecutionPlanner(
                 plannerContext.getMetadata(),
-                plannerContext.getTypeOperators(),
                 plannerContext.getBlockEncodingSerde(),
                 plannerContext.getTypeManager(),
                 functionManager,
@@ -953,7 +952,6 @@ public class LocalQueryRunner
                 operatorFactories,
                 new OrderingCompiler(plannerContext.getTypeOperators()),
                 new DynamicFilterConfig(),
-                blockTypeOperators,
                 tableExecuteContextManager,
                 exchangeManagerRegistry);
 

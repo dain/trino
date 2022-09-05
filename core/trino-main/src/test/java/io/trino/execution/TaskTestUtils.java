@@ -146,7 +146,6 @@ public final class TaskTestUtils
         PageFunctionCompiler pageFunctionCompiler = new PageFunctionCompiler(PLANNER_CONTEXT.getFunctionManager(), 0);
         return new LocalExecutionPlanner(
                 PLANNER_CONTEXT.getMetadata(),
-                PLANNER_CONTEXT.getTypeOperators(),
                 PLANNER_CONTEXT.getBlockEncodingSerde(),
                 PLANNER_CONTEXT.getTypeManager(),
                 PLANNER_CONTEXT.getFunctionManager(),
@@ -176,7 +175,6 @@ public final class TaskTestUtils
                 new TrinoOperatorFactories(),
                 new OrderingCompiler(PLANNER_CONTEXT.getTypeOperators()),
                 new DynamicFilterConfig(),
-                blockTypeOperators,
                 new TableExecuteContextManager(),
                 new ExchangeManagerRegistry(new ExchangeHandleResolver()));
     }
