@@ -928,7 +928,11 @@ public class LocalQueryRunner
         TableExecuteContextManager tableExecuteContextManager = new TableExecuteContextManager();
         tableExecuteContextManager.registerTableExecuteContextForQuery(taskContext.getQueryContext().getQueryId());
         LocalExecutionPlanner executionPlanner = new LocalExecutionPlanner(
-                plannerContext,
+                plannerContext.getMetadata(),
+                plannerContext.getTypeOperators(),
+                plannerContext.getBlockEncodingSerde(),
+                plannerContext.getTypeManager(),
+                functionManager,
                 new TypeAnalyzer(plannerContext, statementAnalyzerFactory),
                 Optional.empty(),
                 pageSourceManager,

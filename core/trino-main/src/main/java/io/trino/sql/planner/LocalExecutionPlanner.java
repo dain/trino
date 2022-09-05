@@ -42,6 +42,7 @@ import io.trino.execution.TaskManagerConfig;
 import io.trino.execution.buffer.OutputBuffer;
 import io.trino.execution.buffer.PagesSerdeFactory;
 import io.trino.index.IndexManager;
+import io.trino.metadata.FunctionManager;
 import io.trino.metadata.MergeHandle;
 import io.trino.metadata.Metadata;
 import io.trino.metadata.ResolvedFunction;
@@ -150,6 +151,7 @@ import io.trino.operator.window.pattern.SetEvaluator.SetEvaluatorSupplier;
 import io.trino.spi.Page;
 import io.trino.spi.PageBuilder;
 import io.trino.spi.TrinoException;
+import io.trino.spi.block.BlockEncodingSerde;
 import io.trino.spi.block.SingleRowBlock;
 import io.trino.spi.connector.ColumnHandle;
 import io.trino.spi.connector.ConnectorIndex;
@@ -166,6 +168,8 @@ import io.trino.spi.predicate.Domain;
 import io.trino.spi.predicate.NullableValue;
 import io.trino.spi.type.RowType;
 import io.trino.spi.type.Type;
+import io.trino.spi.type.TypeManager;
+import io.trino.spi.type.TypeOperators;
 import io.trino.spiller.PartitioningSpillerFactory;
 import io.trino.spiller.SingleStreamSpillerFactory;
 import io.trino.spiller.SpillerFactory;
@@ -378,8 +382,12 @@ public class LocalExecutionPlanner
 {
     private static final Logger log = Logger.get(LocalExecutionPlanner.class);
 
-    private final PlannerContext plannerContext;
     private final Metadata metadata;
+    private final TypeOperators typeOperators;
+    private final BlockTypeOperators blockTypeOperators;
+    private final BlockEncodingSerde blockEncodingSerde;
+    private final TypeManager typeManager;
+    private final FunctionManager functionManager;
     private final TypeAnalyzer typeAnalyzer;
     private final Optional<ExplainAnalyzeContext> explainAnalyzeContext;
     private final PageSourceProvider pageSourceProvider;
@@ -403,7 +411,6 @@ public class LocalExecutionPlanner
     private final OperatorFactories operatorFactories;
     private final OrderingCompiler orderingCompiler;
     private final DynamicFilterConfig dynamicFilterConfig;
-    private final BlockTypeOperators blockTypeOperators;
     private final TableExecuteContextManager tableExecuteContextManager;
     private final ExchangeManagerRegistry exchangeManagerRegistry;
     private final PositionsAppenderFactory positionsAppenderFactory;
@@ -417,7 +424,11 @@ public class LocalExecutionPlanner
 
     @Inject
     public LocalExecutionPlanner(
-            PlannerContext plannerContext,
+            Metadata metadata,
+            TypeOperators typeOperators,
+            BlockEncodingSerde blockEncodingSerde,
+            TypeManager typeManager,
+            FunctionManager functionManager,
             TypeAnalyzer typeAnalyzer,
             Optional<ExplainAnalyzeContext> explainAnalyzeContext,
             PageSourceProvider pageSourceProvider,
@@ -442,8 +453,12 @@ public class LocalExecutionPlanner
             TableExecuteContextManager tableExecuteContextManager,
             ExchangeManagerRegistry exchangeManagerRegistry)
     {
-        this.plannerContext = requireNonNull(plannerContext, "plannerContext is null");
-        this.metadata = plannerContext.getMetadata();
+        this.metadata = requireNonNull(metadata, "metadata is null");
+        this.typeOperators = requireNonNull(typeOperators, "typeOperators is null");
+        this.blockTypeOperators = requireNonNull(blockTypeOperators, "blockTypeOperators is null");
+        this.blockEncodingSerde = requireNonNull(blockEncodingSerde, "blockEncodingSerde is null");
+        this.typeManager = requireNonNull(typeManager, "typeManager is null");
+        this.functionManager = requireNonNull(functionManager, "functionManager is null");
         this.explainAnalyzeContext = requireNonNull(explainAnalyzeContext, "explainAnalyzeContext is null");
         this.pageSourceProvider = requireNonNull(pageSourceProvider, "pageSourceProvider is null");
         this.indexManager = requireNonNull(indexManager, "indexManager is null");
@@ -467,7 +482,6 @@ public class LocalExecutionPlanner
         this.operatorFactories = requireNonNull(operatorFactories, "operatorFactories is null");
         this.orderingCompiler = requireNonNull(orderingCompiler, "orderingCompiler is null");
         this.dynamicFilterConfig = requireNonNull(dynamicFilterConfig, "dynamicFilterConfig is null");
-        this.blockTypeOperators = requireNonNull(blockTypeOperators, "blockTypeOperators is null");
         this.tableExecuteContextManager = requireNonNull(tableExecuteContextManager, "tableExecuteContextManager is null");
         this.exchangeManagerRegistry = requireNonNull(exchangeManagerRegistry, "exchangeManagerRegistry is null");
         this.positionsAppenderFactory = new PositionsAppenderFactory(blockTypeOperators);
@@ -582,7 +596,7 @@ public class LocalExecutionPlanner
                                 plan.getId(),
                                 outputTypes,
                                 pagePreprocessor,
-                                new PagesSerdeFactory(plannerContext.getBlockEncodingSerde(), isExchangeCompressionEnabled(session))),
+                                new PagesSerdeFactory(blockEncodingSerde, isExchangeCompressionEnabled(session))),
                         physicalOperation),
                 context.getDriverInstanceCount());
 
@@ -885,7 +899,7 @@ public class LocalExecutionPlanner
                     context.getNextOperatorId(),
                     node.getId(),
                     directExchangeClientSupplier,
-                    new PagesSerdeFactory(plannerContext.getBlockEncodingSerde(), isExchangeCompressionEnabled(session)),
+                    new PagesSerdeFactory(blockEncodingSerde, isExchangeCompressionEnabled(session)),
                     orderingCompiler,
                     types,
                     outputChannels,
@@ -905,7 +919,7 @@ public class LocalExecutionPlanner
                     context.getNextOperatorId(),
                     node.getId(),
                     directExchangeClientSupplier,
-                    new PagesSerdeFactory(plannerContext.getBlockEncodingSerde(), isExchangeCompressionEnabled(session)),
+                    new PagesSerdeFactory(blockEncodingSerde, isExchangeCompressionEnabled(session)),
                     node.getRetryPolicy(),
                     exchangeManagerRegistry);
 
@@ -923,7 +937,7 @@ public class LocalExecutionPlanner
                     node.getId(),
                     analyzeContext.getQueryPerformanceFetcher(),
                     metadata,
-                    plannerContext.getFunctionManager(),
+                    functionManager,
                     node.isVerbose());
             return new PhysicalOperation(operatorFactory, makeLayout(node), context, source);
         }
@@ -1027,7 +1041,7 @@ public class LocalExecutionPlanner
                     1000,
                     maxPartialTopNMemorySize,
                     joinCompiler,
-                    plannerContext.getTypeOperators(),
+                    typeOperators,
                     blockTypeOperators);
 
             return new PhysicalOperation(operatorFactory, makeLayout(node), context, source);
@@ -1162,14 +1176,14 @@ public class LocalExecutionPlanner
         {
             if (resolvedFunction.getFunctionKind() == FunctionKind.AGGREGATE) {
                 return uncheckedCacheGet(aggregationWindowFunctionSupplierCache, new FunctionKey(resolvedFunction.getFunctionId(), resolvedFunction.getSignature()), () -> {
-                    AggregationImplementation aggregationImplementation = plannerContext.getFunctionManager().getAggregationImplementation(resolvedFunction);
+                    AggregationImplementation aggregationImplementation = functionManager.getAggregationImplementation(resolvedFunction);
                     return new AggregationWindowFunctionSupplier(
                             resolvedFunction.getSignature(),
                             aggregationImplementation,
                             resolvedFunction.getFunctionNullability());
                 });
             }
-            return plannerContext.getFunctionManager().getWindowFunctionSupplier(resolvedFunction);
+            return functionManager.getWindowFunctionSupplier(resolvedFunction);
         }
 
         @Override
@@ -1573,7 +1587,7 @@ public class LocalExecutionPlanner
                             new FunctionKey(resolvedFunction.getFunctionId(), resolvedFunction.getSignature()),
                             () -> new AggregationWindowFunctionSupplier(
                                     resolvedFunction.getSignature(),
-                                    plannerContext.getFunctionManager().getAggregationImplementation(pointer.getFunction()),
+                                    functionManager.getAggregationImplementation(pointer.getFunction()),
                                     resolvedFunction.getFunctionNullability()));
 
                     // TODO when we support lambda arguments: lambda cannot have runtime-evaluated symbols -- add check in the Analyzer
@@ -1648,7 +1662,7 @@ public class LocalExecutionPlanner
                     (int) node.getCount(),
                     sortChannels,
                     sortOrders,
-                    plannerContext.getTypeOperators());
+                    typeOperators);
 
             return new PhysicalOperation(operator, source.getLayout(), context, source);
         }
@@ -1972,7 +1986,7 @@ public class LocalExecutionPlanner
 
         private RowExpression toRowExpression(Expression expression, Map<NodeRef<Expression>, Type> types, Map<Symbol, Integer> layout)
         {
-            return SqlToRowExpressionTranslator.translate(expression, types, layout, metadata, plannerContext.getFunctionManager(), session, true);
+            return SqlToRowExpressionTranslator.translate(expression, types, layout, metadata, functionManager, session, true);
         }
 
         @Override
@@ -2020,7 +2034,9 @@ public class LocalExecutionPlanner
                     dynamicFilters,
                     tableScanNode.getAssignments(),
                     context.getTypes(),
-                    plannerContext);
+                    metadata,
+                    functionManager,
+                    typeOperators);
         }
 
         @Override
@@ -2045,6 +2061,7 @@ public class LocalExecutionPlanner
                     Map<NodeRef<Expression>, Type> types = typeAnalyzer.getTypes(session, TypeProvider.empty(), row);
                     checkState(types.get(NodeRef.of(row)) instanceof RowType, "unexpected type of Values row: %s", types);
                     // evaluate the literal value
+                    PlannerContext plannerContext = new PlannerContext(metadata, typeOperators, blockEncodingSerde, typeManager, functionManager);
                     Object result = new ExpressionInterpreter(row, plannerContext, session, types).evaluate();
                     for (int j = 0; j < outputTypes.size(); j++) {
                         // divide row into fields
@@ -2159,7 +2176,7 @@ public class LocalExecutionPlanner
             List<Integer> remappedProbeKeyChannels = remappedProbeKeyChannelsBuilder.build();
             Function<RecordSet, RecordSet> probeKeyNormalizer = recordSet -> {
                 if (!overlappingFieldSets.isEmpty()) {
-                    recordSet = new FieldSetFilteringRecordSet(plannerContext.getTypeOperators(), recordSet, overlappingFieldSets);
+                    recordSet = new FieldSetFilteringRecordSet(typeOperators, recordSet, overlappingFieldSets);
                 }
                 return new MappedRecordSet(recordSet, remappedProbeKeyChannels);
             };
@@ -3672,7 +3689,7 @@ public class LocalExecutionPlanner
                     new FunctionKey(resolvedFunction.getFunctionId(), resolvedFunction.getSignature()),
                     () -> generateAccumulatorFactory(
                             resolvedFunction.getSignature(),
-                            plannerContext.getFunctionManager().getAggregationImplementation(aggregation.getResolvedFunction()),
+                            functionManager.getAggregationImplementation(aggregation.getResolvedFunction()),
                             resolvedFunction.getFunctionNullability()));
 
             if (aggregation.isDistinct()) {
@@ -3790,7 +3807,7 @@ public class LocalExecutionPlanner
                             .buildOrThrow();
 
                     LambdaDefinitionExpression lambda = (LambdaDefinitionExpression) toRowExpression(lambdaExpression, expressionTypes, ImmutableMap.of());
-                    Class<? extends Supplier<Object>> lambdaProviderClass = compileLambdaProvider(lambda, plannerContext.getFunctionManager(), lambdaInterfaces.get(i));
+                    Class<? extends Supplier<Object>> lambdaProviderClass = compileLambdaProvider(lambda, functionManager, lambdaInterfaces.get(i));
                     try {
                         lambdaProviders.add((lambdaProviderClass.getConstructor(ConnectorSession.class).newInstance(session.toConnectorSession())));
                     }

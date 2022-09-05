@@ -416,6 +416,12 @@ public class TestLocalDynamicFiltersCollector
             Map<Symbol, ColumnHandle> columnsMap,
             TypeProvider typeProvider)
     {
-        return collector.createDynamicFilter(descriptors, columnsMap, typeProvider, PLANNER_CONTEXT);
+        return collector.createDynamicFilter(
+                descriptors,
+                columnsMap,
+                typeProvider,
+                PLANNER_CONTEXT.getMetadata(),
+                PLANNER_CONTEXT.getFunctionManager(),
+                PLANNER_CONTEXT.getTypeOperators());
     }
 }

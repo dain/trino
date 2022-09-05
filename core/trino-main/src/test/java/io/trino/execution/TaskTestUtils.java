@@ -145,7 +145,11 @@ public final class TaskTestUtils
 
         PageFunctionCompiler pageFunctionCompiler = new PageFunctionCompiler(PLANNER_CONTEXT.getFunctionManager(), 0);
         return new LocalExecutionPlanner(
-                PLANNER_CONTEXT,
+                PLANNER_CONTEXT.getMetadata(),
+                PLANNER_CONTEXT.getTypeOperators(),
+                PLANNER_CONTEXT.getBlockEncodingSerde(),
+                PLANNER_CONTEXT.getTypeManager(),
+                PLANNER_CONTEXT.getFunctionManager(),
                 createTestingTypeAnalyzer(PLANNER_CONTEXT),
                 Optional.empty(),
                 pageSourceManager,
