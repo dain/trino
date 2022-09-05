@@ -147,7 +147,7 @@ public class FunctionManager
 
     private FunctionDependencies getFunctionDependencies(ResolvedFunction resolvedFunction)
     {
-        return new InternalFunctionDependencies(this::getScalarFunctionImplementation, resolvedFunction.getTypeDependencies(), resolvedFunction.getFunctionDependencies());
+        return new InternalFunctionDependencies(this::getScalarFunctionImplementationInternal, resolvedFunction.getTypeDependencies(), resolvedFunction.getFunctionDependencies());
     }
 
     private FunctionProvider getFunctionProvider(ResolvedFunction resolvedFunction)
