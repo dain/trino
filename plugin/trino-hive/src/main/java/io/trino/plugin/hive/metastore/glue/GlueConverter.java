@@ -128,6 +128,27 @@ final class GlueConverter
                 glueDb.parameters());
     }
 
+    public static software.amazon.awssdk.services.glue.model.Database toGlueDatabase(Database database)
+    {
+        return software.amazon.awssdk.services.glue.model.Database.builder()
+                .name(database.getDatabaseName())
+                .parameters(database.getParameters())
+                .description(database.getComment().orElse(null))
+                .locationUri(database.getLocation().orElse(null))
+                .build();
+    }
+
+    public static Database fromGlueDatabaseInput(software.amazon.awssdk.services.glue.model.DatabaseInput glueDb)
+    {
+        return new Database(
+                glueDb.name(),
+                Optional.ofNullable(emptyToNull(glueDb.locationUri())),
+                Optional.of(PUBLIC_OWNER),
+                Optional.of(PrincipalType.ROLE),
+                Optional.ofNullable(glueDb.description()),
+                glueDb.parameters());
+    }
+
     public static DatabaseInput toGlueDatabaseInput(Database database)
     {
         return DatabaseInput.builder()
