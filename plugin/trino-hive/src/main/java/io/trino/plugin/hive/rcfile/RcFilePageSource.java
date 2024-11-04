@@ -171,7 +171,7 @@ public class RcFilePageSource
             implements SourcePage
     {
         private final int expectedBatchId = pageId;
-        private final Block[] blocks = new Block[hiveColumnIndexes.length];
+        private Block[] blocks = new Block[hiveColumnIndexes.length];
         private SelectedPositions selectedPositions;
 
         private long sizeInBytes;
@@ -185,6 +185,7 @@ public class RcFilePageSource
         @Override
         public int getPositionCount()
         {
+            checkState(blocks != null, "page is destroyed");
             return selectedPositions.positionCount();
         }
 
@@ -203,6 +204,9 @@ public class RcFilePageSource
         @Override
         public void retainedBytesForEachPart(ObjLongConsumer<Object> consumer)
         {
+            if (blocks == null) {
+                return;
+            }
             for (Block block : blocks) {
                 if (block != null) {
                     block.retainedBytesForEachPart(consumer);
@@ -213,12 +217,14 @@ public class RcFilePageSource
         @Override
         public int getChannelCount()
         {
+            checkState(blocks != null, "page is destroyed");
             return blocks.length;
         }
 
         @Override
         public Block getBlock(int channel)
         {
+            checkState(blocks != null, "page is destroyed");
             checkState(pageId == expectedBatchId);
             Block block = blocks[channel];
             if (block == null) {
@@ -248,6 +254,7 @@ public class RcFilePageSource
         @Override
         public Page getPage()
         {
+            checkState(blocks != null, "page is destroyed");
             // ensure all blocks are loaded
             for (int i = 0; i < blocks.length; i++) {
                 getBlock(i);
@@ -258,6 +265,7 @@ public class RcFilePageSource
         @Override
         public void selectPositions(int[] positions, int offset, int size)
         {
+            checkState(blocks != null, "page is destroyed");
             selectedPositions = selectedPositions.selectPositions(positions, offset, size);
             retainedSizeInBytes = 0;
             for (int i = 0; i < blocks.length; i++) {
@@ -268,6 +276,21 @@ public class RcFilePageSource
                     blocks[i] = block;
                 }
             }
+        }
+
+        @Override
+        public void destroy()
+        {
+            blocks = null;
+            selectedPositions = null;
+            sizeInBytes = 0;
+            retainedSizeInBytes = 0;
+        }
+
+        @Override
+        public boolean isDestroyed()
+        {
+            return blocks == null;
         }
     }
 

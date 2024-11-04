@@ -28,6 +28,7 @@ import io.trino.spi.type.Type;
 import java.util.List;
 import java.util.function.ObjLongConsumer;
 
+import static com.google.common.base.Preconditions.checkState;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -150,6 +151,7 @@ class TpchPageSource
         @Override
         public int getPositionCount()
         {
+            checkState(page != null, "page is destroyed");
             return page.getPositionCount();
         }
 
@@ -162,12 +164,18 @@ class TpchPageSource
         @Override
         public long getRetainedSizeInBytes()
         {
+            if (page == null) {
+                return 0;
+            }
             return page.getRetainedSizeInBytes();
         }
 
         @Override
         public void retainedBytesForEachPart(ObjLongConsumer<Object> consumer)
         {
+            if (page == null) {
+                return;
+            }
             for (int i = 0; i < page.getChannelCount(); i++) {
                 page.getBlock(i).retainedBytesForEachPart(consumer);
             }
@@ -176,12 +184,14 @@ class TpchPageSource
         @Override
         public int getChannelCount()
         {
+            checkState(page != null, "page is destroyed");
             return page.getChannelCount();
         }
 
         @Override
         public Block getBlock(int channel)
         {
+            checkState(page != null, "page is destroyed");
             Block block = page.getBlock(channel);
             if (!loaded[channel]) {
                 loaded[channel] = true;
@@ -193,13 +203,28 @@ class TpchPageSource
         @Override
         public Page getPage()
         {
+            checkState(page != null, "page is destroyed");
             return page;
         }
 
         @Override
         public void selectPositions(int[] positions, int offset, int size)
         {
+            checkState(page != null, "page is destroyed");
             page = page.getPositions(positions, offset, size);
+        }
+
+        @Override
+        public void destroy()
+        {
+            page = null;
+            sizeInBytes = 0;
+        }
+
+        @Override
+        public boolean isDestroyed()
+        {
+            return page == null;
         }
     }
 }

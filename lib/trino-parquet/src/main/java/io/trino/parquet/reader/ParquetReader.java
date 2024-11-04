@@ -267,7 +267,7 @@ public class ParquetReader
             implements SourcePage
     {
         private final int expectedPageId = currentPageId;
-        private final Block[] blocks = new Block[columnFields.size() + (appendRowNumberColumn ? 1 : 0)];
+        private Block[] blocks = new Block[columnFields.size() + (appendRowNumberColumn ? 1 : 0)];
         private final int rowNumberColumnIndex = appendRowNumberColumn ? columnFields.size() : -1;
         private SelectedPositions selectedPositions;
 
@@ -282,6 +282,7 @@ public class ParquetReader
         @Override
         public int getPositionCount()
         {
+            checkState(blocks != null, "page is destroyed");
             return selectedPositions.positionCount();
         }
 
@@ -300,6 +301,9 @@ public class ParquetReader
         @Override
         public void retainedBytesForEachPart(ObjLongConsumer<Object> consumer)
         {
+            if (blocks == null) {
+                return;
+            }
             for (Block block : blocks) {
                 if (block != null) {
                     block.retainedBytesForEachPart(consumer);
@@ -310,12 +314,14 @@ public class ParquetReader
         @Override
         public int getChannelCount()
         {
+            checkState(blocks != null, "page is destroyed");
             return blocks.length;
         }
 
         @Override
         public Block getBlock(int channel)
         {
+            checkState(blocks != null, "page is destroyed");
             checkState(currentPageId == expectedPageId, "Parquet reader has been advanced beyond block");
             Block block = blocks[channel];
             if (block == null) {
@@ -342,6 +348,7 @@ public class ParquetReader
         @Override
         public Page getPage()
         {
+            checkState(blocks != null, "page is destroyed");
             // ensure all blocks are loaded
             for (int i = 0; i < blocks.length; i++) {
                 getBlock(i);
@@ -352,6 +359,7 @@ public class ParquetReader
         @Override
         public void selectPositions(int[] positions, int offset, int size)
         {
+            checkState(blocks != null, "page is destroyed");
             selectedPositions = selectedPositions.selectPositions(positions, offset, size);
             retainedSizeInBytes = 0;
             for (int i = 0; i < blocks.length; i++) {
@@ -362,6 +370,21 @@ public class ParquetReader
                     blocks[i] = block;
                 }
             }
+        }
+
+        @Override
+        public void destroy()
+        {
+            blocks = null;
+            selectedPositions = null;
+            sizeInBytes = 0;
+            retainedSizeInBytes = 0;
+        }
+
+        @Override
+        public boolean isDestroyed()
+        {
+            return blocks == null;
         }
     }
 

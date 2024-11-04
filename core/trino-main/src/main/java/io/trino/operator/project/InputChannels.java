@@ -26,6 +26,7 @@ import java.util.Set;
 import java.util.function.ObjLongConsumer;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
+import static com.google.common.base.Preconditions.checkState;
 import static java.util.Objects.requireNonNull;
 
 public class InputChannels
@@ -65,6 +66,10 @@ public class InputChannels
         return Collections.unmodifiableList(Ints.asList(inputChannels));
     }
 
+    /**
+     * Returns a new {@link SourcePage} that wraps the given {@code page} and exposes only the input channels.
+     * Destroying the returned page will also destroy the given {@code page}.
+     */
     public SourcePage getInputChannels(SourcePage page)
     {
         return new InputChannelsSourcePage(page, inputChannels, eagerlyLoad);
@@ -81,9 +86,9 @@ public class InputChannels
     private static final class InputChannelsSourcePage
             implements SourcePage
     {
-        private final SourcePage sourcePage;
-        private final int[] channels;
-        private final Block[] blocks;
+        private SourcePage sourcePage;
+        private int[] channels;
+        private Block[] blocks;
 
         private InputChannelsSourcePage(SourcePage sourcePage, int[] channels, @Nullable boolean[] eagerlyLoad)
         {
@@ -106,24 +111,34 @@ public class InputChannels
         @Override
         public int getPositionCount()
         {
+            checkState(sourcePage != null, "page is destroyed");
             return sourcePage.getPositionCount();
         }
 
         @Override
         public long getSizeInBytes()
         {
+            if (sourcePage == null) {
+                return 0;
+            }
             return sourcePage.getSizeInBytes();
         }
 
         @Override
         public long getRetainedSizeInBytes()
         {
+            if (sourcePage == null) {
+                return 0;
+            }
             return sourcePage.getRetainedSizeInBytes();
         }
 
         @Override
         public void retainedBytesForEachPart(ObjLongConsumer<Object> consumer)
         {
+            if (sourcePage == null) {
+                return;
+            }
             for (Block block : blocks) {
                 if (block != null) {
                     block.retainedBytesForEachPart(consumer);
@@ -134,12 +149,14 @@ public class InputChannels
         @Override
         public int getChannelCount()
         {
+            checkState(sourcePage != null, "page is destroyed");
             return blocks.length;
         }
 
         @Override
         public Block getBlock(int channel)
         {
+            checkState(sourcePage != null, "page is destroyed");
             Block block = blocks[channel];
             if (block == null) {
                 block = sourcePage.getBlock(channels[channel]);
@@ -151,6 +168,7 @@ public class InputChannels
         @Override
         public Page getPage()
         {
+            checkState(sourcePage != null, "page is destroyed");
             for (int i = 0; i < blocks.length; i++) {
                 getBlock(i);
             }
@@ -160,6 +178,7 @@ public class InputChannels
         @Override
         public Page getColumns(int[] channels)
         {
+            checkState(sourcePage != null, "page is destroyed");
             Block[] blocks = new Block[channels.length];
             for (int i = 0; i < channels.length; i++) {
                 blocks[i] = getBlock(channels[i]);
@@ -170,6 +189,7 @@ public class InputChannels
         @Override
         public void selectPositions(int[] positions, int offset, int size)
         {
+            checkState(sourcePage != null, "page is destroyed");
             sourcePage.selectPositions(positions, offset, size);
             for (int i = 0; i < blocks.length; i++) {
                 Block block = blocks[i];
@@ -177,6 +197,23 @@ public class InputChannels
                     blocks[i] = block.getPositions(positions, offset, size);
                 }
             }
+        }
+
+        @Override
+        public void destroy()
+        {
+            if (sourcePage != null) {
+                sourcePage.destroy();
+                sourcePage = null;
+            }
+            blocks = null;
+            channels = null;
+        }
+
+        @Override
+        public boolean isDestroyed()
+        {
+            return sourcePage == null || sourcePage.isDestroyed();
         }
     }
 }

@@ -34,24 +34,36 @@ final class StaticSourcePage
     @Override
     public int getPositionCount()
     {
+        if (page == null) {
+            throw new IllegalStateException("page is destroyed");
+        }
         return page.getPositionCount();
     }
 
     @Override
     public long getSizeInBytes()
     {
+        if (page == null) {
+            return 0;
+        }
         return page.getSizeInBytes();
     }
 
     @Override
     public long getRetainedSizeInBytes()
     {
+        if (page == null) {
+            return 0;
+        }
         return page.getRetainedSizeInBytes();
     }
 
     @Override
     public void retainedBytesForEachPart(ObjLongConsumer<Object> consumer)
     {
+        if (page == null) {
+            return;
+        }
         for (int i = 0; i < page.getChannelCount(); i++) {
             page.getBlock(i).retainedBytesForEachPart(consumer);
         }
@@ -60,30 +72,57 @@ final class StaticSourcePage
     @Override
     public int getChannelCount()
     {
+        if (page == null) {
+            throw new IllegalStateException("page is destroyed");
+        }
         return page.getChannelCount();
     }
 
     @Override
     public Block getBlock(int channel)
     {
+        if (page == null) {
+            throw new IllegalStateException("page is destroyed");
+        }
         return page.getBlock(channel);
     }
 
     @Override
     public Page getPage()
     {
+        if (page == null) {
+            throw new IllegalStateException("page is destroyed");
+        }
         return page;
     }
 
     @Override
     public Page getColumns(int[] channels)
     {
+        if (page == null) {
+            throw new IllegalStateException("page is destroyed");
+        }
         return page.getColumns(channels);
     }
 
     @Override
     public void selectPositions(int[] positions, int offset, int size)
     {
+        if (page == null) {
+            throw new IllegalStateException("page is destroyed");
+        }
         page = page.getPositions(positions, offset, size);
+    }
+
+    @Override
+    public void destroy()
+    {
+        page = null;
+    }
+
+    @Override
+    public boolean isDestroyed()
+    {
+        return page == null;
     }
 }

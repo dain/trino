@@ -35,6 +35,9 @@ final class NoChannelsSourcePage
     @Override
     public int getPositionCount()
     {
+        if (positionCount < 0) {
+            throw new IllegalStateException("page is destroyed");
+        }
         return positionCount;
     }
 
@@ -56,6 +59,9 @@ final class NoChannelsSourcePage
     @Override
     public int getChannelCount()
     {
+        if (positionCount < 0) {
+            throw new IllegalStateException("page is destroyed");
+        }
         return 0;
     }
 
@@ -68,12 +74,18 @@ final class NoChannelsSourcePage
     @Override
     public Page getPage()
     {
+        if (positionCount < 0) {
+            throw new IllegalStateException("page is destroyed");
+        }
         return new Page(positionCount);
     }
 
     @Override
     public void selectPositions(int[] positions, int offset, int size)
     {
+        if (positionCount < 0) {
+            throw new IllegalStateException("page is destroyed");
+        }
         if (size > positionCount) {
             throw new IllegalArgumentException("Page has no channels");
         }
@@ -82,5 +94,17 @@ final class NoChannelsSourcePage
             Objects.checkIndex(offset + i, positionCount);
         }
         positionCount = size;
+    }
+
+    @Override
+    public void destroy()
+    {
+        positionCount = -1;
+    }
+
+    @Override
+    public boolean isDestroyed()
+    {
+        return positionCount == -1;
     }
 }

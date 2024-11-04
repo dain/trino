@@ -111,7 +111,7 @@ public class OrcDeletedRows
             implements SourcePage
     {
         private final OptionalLong startRowId;
-        private final SourcePage sourcePage;
+        private SourcePage sourcePage;
         private boolean deleteMaskApplied;
 
         public OrcAcidMaskedSourcePage(SourcePage sourcePage, OptionalLong startRowId)
@@ -123,6 +123,7 @@ public class OrcDeletedRows
         @Override
         public int getPositionCount()
         {
+            checkState(sourcePage != null, "page is destroyed");
             applyDeleteMaskIfNecessary();
             return sourcePage.getPositionCount();
         }
@@ -130,7 +131,7 @@ public class OrcDeletedRows
         @Override
         public long getSizeInBytes()
         {
-            if (!deleteMaskApplied) {
+            if (!deleteMaskApplied || sourcePage == null) {
                 return 0;
             }
             return sourcePage.getSizeInBytes();
@@ -139,24 +140,32 @@ public class OrcDeletedRows
         @Override
         public long getRetainedSizeInBytes()
         {
+            if (sourcePage == null) {
+                return 0;
+            }
             return sourcePage.getRetainedSizeInBytes();
         }
 
         @Override
         public void retainedBytesForEachPart(ObjLongConsumer<Object> consumer)
         {
+            if (sourcePage == null) {
+                return;
+            }
             sourcePage.retainedBytesForEachPart(consumer);
         }
 
         @Override
         public int getChannelCount()
         {
+            checkState(sourcePage != null, "page is destroyed");
             return sourcePage.getChannelCount();
         }
 
         @Override
         public Block getBlock(int channel)
         {
+            checkState(sourcePage != null, "page is destroyed");
             applyDeleteMaskIfNecessary();
             return sourcePage.getBlock(channel);
         }
@@ -164,6 +173,7 @@ public class OrcDeletedRows
         @Override
         public Page getPage()
         {
+            checkState(sourcePage != null, "page is destroyed");
             applyDeleteMaskIfNecessary();
             return sourcePage.getPage();
         }
@@ -171,8 +181,24 @@ public class OrcDeletedRows
         @Override
         public void selectPositions(int[] positions, int offset, int size)
         {
+            checkState(sourcePage != null, "page is destroyed");
             applyDeleteMaskIfNecessary();
             sourcePage.selectPositions(positions, offset, size);
+        }
+
+        @Override
+        public void destroy()
+        {
+            if (sourcePage != null) {
+                sourcePage.destroy();
+                sourcePage = null;
+            }
+        }
+
+        @Override
+        public boolean isDestroyed()
+        {
+            return sourcePage == null || sourcePage.isDestroyed();
         }
 
         private void applyDeleteMaskIfNecessary()

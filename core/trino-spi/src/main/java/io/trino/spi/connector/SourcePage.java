@@ -58,16 +58,22 @@ public interface SourcePage
 
     /**
      * Gets the current loaded size of the page in bytes.
+     * <p>
+     * This method will return 0 if the page has been destroyed.
      */
     long getSizeInBytes();
 
     /**
      * Gets the current retained size of the page in bytes.
+     * <p>
+     * This method is callable even if the page has been destroyed.
      */
     long getRetainedSizeInBytes();
 
     /**
      * Calls retainedBytesForEachPart on all loaded blocks;
+     * <p>
+     * If the page has been destroyed, this method is a no-op.
      */
     void retainedBytesForEachPart(ObjLongConsumer<Object> consumer);
 
@@ -107,4 +113,19 @@ public interface SourcePage
      * the underlying reader to filter positions on subsequent reads.
      */
     void selectPositions(int[] positions, int offset, int size);
+
+    /**
+     * Destroy this page and release any resources it holds.
+     * <p>
+     * This method should be called when the page is no longer needed.
+     * Once this method is called, the page should not be used, and all
+     * method calls on the page should throw an exception, unless noted otherwise.
+     * This method is idempotent and can be called multiple times.
+     */
+    void destroy();
+
+    /**
+     * Returns true if this page has been destroyed.
+     */
+    boolean isDestroyed();
 }

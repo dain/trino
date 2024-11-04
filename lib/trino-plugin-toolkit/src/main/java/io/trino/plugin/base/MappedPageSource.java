@@ -23,8 +23,15 @@ import java.io.IOException;
 import java.util.List;
 import java.util.function.ObjLongConsumer;
 
+import static com.google.common.base.Preconditions.checkState;
 import static java.util.Objects.requireNonNull;
 
+/**
+ * A page source wrapper that maps the columns of the delegate page source.
+ * Closing this page source will also close the delegate page source, and
+ * destroying a page from this page source will also destroy the page from
+ * the delegate page source.
+ */
 public class MappedPageSource
         implements ConnectorPageSource
 {
@@ -78,60 +85,77 @@ public class MappedPageSource
         delegate.close();
     }
 
-    private record MappedSourcePage(SourcePage sourcePage, int[] channels)
+    private static final class MappedSourcePage
             implements SourcePage
     {
-        private MappedSourcePage
+        private SourcePage sourcePage;
+        private int[] channels;
+
+        private MappedSourcePage(SourcePage sourcePage, int[] channels)
         {
-            requireNonNull(sourcePage, "sourcePage is null");
-            requireNonNull(channels, "channels is null");
+            this.sourcePage = requireNonNull(sourcePage, "sourcePage is null");
+            this.channels = requireNonNull(channels, "channels is null");
         }
 
         @Override
         public int getPositionCount()
         {
+            checkState(sourcePage != null, "page is destroyed");
             return sourcePage.getPositionCount();
         }
 
         @Override
         public long getSizeInBytes()
         {
+            if (sourcePage == null) {
+                return 0;
+            }
             return sourcePage.getSizeInBytes();
         }
 
         @Override
         public long getRetainedSizeInBytes()
         {
+            if (sourcePage == null) {
+                return 0;
+            }
             return sourcePage.getRetainedSizeInBytes();
         }
 
         @Override
         public void retainedBytesForEachPart(ObjLongConsumer<Object> consumer)
         {
+            if (sourcePage == null) {
+                return;
+            }
             sourcePage.retainedBytesForEachPart(consumer);
         }
 
         @Override
         public int getChannelCount()
         {
+            checkState(sourcePage != null, "page is destroyed");
             return channels.length;
         }
 
         @Override
         public Block getBlock(int channel)
         {
+            checkState(sourcePage != null, "page is destroyed");
             return sourcePage.getBlock(channels[channel]);
         }
 
         @Override
         public Page getPage()
         {
+            checkState(sourcePage != null, "page is destroyed");
             return sourcePage.getColumns(channels);
         }
 
         @Override
         public Page getColumns(int[] channels)
         {
+            checkState(sourcePage != null, "page is destroyed");
             int[] newChannels = new int[channels.length];
             for (int i = 0; i < channels.length; i++) {
                 newChannels[i] = this.channels[channels[i]];
@@ -142,7 +166,24 @@ public class MappedPageSource
         @Override
         public void selectPositions(int[] positions, int offset, int size)
         {
+            checkState(sourcePage != null, "page is destroyed");
             sourcePage.selectPositions(positions, offset, size);
+        }
+
+        @Override
+        public void destroy()
+        {
+            if (sourcePage != null) {
+                sourcePage.destroy();
+                sourcePage = null;
+            }
+            channels = null;
+        }
+
+        @Override
+        public boolean isDestroyed()
+        {
+            return sourcePage == null || sourcePage.isDestroyed();
         }
     }
 }

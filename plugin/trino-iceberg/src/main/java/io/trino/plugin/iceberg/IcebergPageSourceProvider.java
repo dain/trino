@@ -118,7 +118,6 @@ import java.util.function.ObjLongConsumer;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Suppliers.memoize;
 import static com.google.common.base.Throwables.throwIfInstanceOf;
@@ -1492,15 +1491,18 @@ public class IcebergPageSourceProvider
         }
     }
 
-    private record PrefixColumnsSourcePage(SourcePage sourcePage, int channelCount, int[] channels)
+    private static class PrefixColumnsSourcePage
             implements SourcePage
     {
-        private PrefixColumnsSourcePage
+        private SourcePage sourcePage;
+        private final int channelCount;
+        private int[] channels;
+
+        private PrefixColumnsSourcePage(SourcePage sourcePage, int channelCount, int[] channels)
         {
-            requireNonNull(sourcePage, "sourcePage is null");
-            checkArgument(channelCount >= 0, "channelCount is negative");
-            checkArgument(channelCount < sourcePage.getChannelCount(), "channelCount is greater than or equal to sourcePage channel count");
-            checkArgument(channels.length == channelCount, "channels length does not match channelCount");
+            this.sourcePage = requireNonNull(sourcePage, "sourcePage is null");
+            this.channelCount = channelCount;
+            this.channels = requireNonNull(channels, "channels is null");
         }
 
         private PrefixColumnsSourcePage(SourcePage sourcePage, int channelCount)
@@ -1511,36 +1513,48 @@ public class IcebergPageSourceProvider
         @Override
         public int getPositionCount()
         {
+            checkState(sourcePage != null, "page is destroyed");
             return sourcePage.getPositionCount();
         }
 
         @Override
         public long getSizeInBytes()
         {
+            if (sourcePage == null) {
+                return 0;
+            }
             return sourcePage.getSizeInBytes();
         }
 
         @Override
         public long getRetainedSizeInBytes()
         {
+            if (sourcePage == null) {
+                return 0;
+            }
             return sourcePage.getRetainedSizeInBytes();
         }
 
         @Override
         public void retainedBytesForEachPart(ObjLongConsumer<Object> consumer)
         {
+            if (sourcePage == null) {
+                return;
+            }
             sourcePage.retainedBytesForEachPart(consumer);
         }
 
         @Override
         public int getChannelCount()
         {
+            checkState(sourcePage != null, "page is destroyed");
             return channelCount;
         }
 
         @Override
         public Block getBlock(int channel)
         {
+            checkState(sourcePage != null, "page is destroyed");
             checkIndex(channel, channelCount);
             return sourcePage.getBlock(channel);
         }
@@ -1548,12 +1562,14 @@ public class IcebergPageSourceProvider
         @Override
         public Page getPage()
         {
+            checkState(sourcePage != null, "page is destroyed");
             return sourcePage.getColumns(channels);
         }
 
         @Override
         public Page getColumns(int[] channels)
         {
+            checkState(sourcePage != null, "page is destroyed");
             for (int channel : channels) {
                 checkIndex(channel, channelCount);
             }
@@ -1563,7 +1579,24 @@ public class IcebergPageSourceProvider
         @Override
         public void selectPositions(int[] positions, int offset, int size)
         {
+            checkState(sourcePage != null, "page is destroyed");
             sourcePage.selectPositions(positions, offset, size);
+        }
+
+        @Override
+        public void destroy()
+        {
+            if (sourcePage != null) {
+                sourcePage.destroy();
+                sourcePage = null;
+            }
+            channels = null;
+        }
+
+        @Override
+        public boolean isDestroyed()
+        {
+            return sourcePage == null || sourcePage.isDestroyed();
         }
     }
 }

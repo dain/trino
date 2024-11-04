@@ -33,6 +33,7 @@ import java.util.function.Function;
 import java.util.function.ObjLongConsumer;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 import static io.trino.plugin.base.util.Closables.closeAllSuppress;
 import static io.trino.spi.block.RowBlock.getRowFieldsFromBlock;
 import static java.util.Objects.requireNonNull;
@@ -279,43 +280,51 @@ public final class TransformConnectorPageSource
         }
     }
 
-    private record TransformSourcePage(SourcePage sourcePage, List<Function<SourcePage, Block>> transforms, Block[] blocks)
+    private static class TransformSourcePage
             implements SourcePage
     {
+        private SourcePage sourcePage;
+        private List<Function<SourcePage, Block>> transforms;
+        private Block[] blocks;
+
         private TransformSourcePage(SourcePage sourcePage, List<Function<SourcePage, Block>> transforms)
         {
-            this(sourcePage, transforms, new Block[transforms.size()]);
-        }
-
-        private TransformSourcePage
-        {
-            requireNonNull(sourcePage, "sourcePage is null");
-            transforms = List.copyOf(requireNonNull(transforms, "transforms is null"));
-            requireNonNull(blocks, "blocks is null");
-            checkArgument(transforms.size() == blocks.length, "transforms and blocks size mismatch");
+            this.sourcePage = requireNonNull(sourcePage, "sourcePage is null");
+            this.transforms = List.copyOf(requireNonNull(transforms, "transforms is null"));
+            this.blocks = new Block[transforms.size()];
         }
 
         @Override
         public int getPositionCount()
         {
+            checkState(sourcePage != null, "page is destroyed");
             return sourcePage.getPositionCount();
         }
 
         @Override
         public long getSizeInBytes()
         {
+            if (sourcePage == null) {
+                return 0;
+            }
             return sourcePage.getSizeInBytes();
         }
 
         @Override
         public long getRetainedSizeInBytes()
         {
+            if (sourcePage == null) {
+                return 0;
+            }
             return sourcePage.getRetainedSizeInBytes();
         }
 
         @Override
         public void retainedBytesForEachPart(ObjLongConsumer<Object> consumer)
         {
+            if (sourcePage == null) {
+                return;
+            }
             for (Block block : blocks) {
                 if (block != null) {
                     block.retainedBytesForEachPart(consumer);
@@ -326,12 +335,14 @@ public final class TransformConnectorPageSource
         @Override
         public int getChannelCount()
         {
+            checkState(sourcePage != null, "page is destroyed");
             return blocks.length;
         }
 
         @Override
         public Block getBlock(int channel)
         {
+            checkState(sourcePage != null, "page is destroyed");
             Block block = blocks[channel];
             if (block == null) {
                 block = transforms.get(channel).apply(sourcePage);
@@ -343,6 +354,7 @@ public final class TransformConnectorPageSource
         @Override
         public Page getPage()
         {
+            checkState(sourcePage != null, "page is destroyed");
             for (int i = 0; i < blocks.length; i++) {
                 getBlock(i);
             }
@@ -352,6 +364,7 @@ public final class TransformConnectorPageSource
         @Override
         public void selectPositions(int[] positions, int offset, int size)
         {
+            checkState(sourcePage != null, "page is destroyed");
             sourcePage.selectPositions(positions, offset, size);
             for (int i = 0; i < blocks.length; i++) {
                 Block block = blocks[i];
@@ -359,6 +372,23 @@ public final class TransformConnectorPageSource
                     blocks[i] = block.getPositions(positions, offset, size);
                 }
             }
+        }
+
+        @Override
+        public void destroy()
+        {
+            if (sourcePage != null) {
+                sourcePage.destroy();
+                sourcePage = null;
+            }
+            transforms = null;
+            blocks = null;
+        }
+
+        @Override
+        public boolean isDestroyed()
+        {
+            return sourcePage == null || sourcePage.isDestroyed();
         }
     }
 }
