@@ -23,9 +23,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 public class PageChannelSelector
         implements Function<Page, Page>
 {
-    // No channels need to be remapped, only ensure that all page blocks are loaded
-    private static final Function<Page, Page> GET_LOADED_PAGE = Page::getLoadedPage;
-
     private final int[] channels;
 
     public PageChannelSelector(int... channels)
@@ -39,10 +36,5 @@ public class PageChannelSelector
     {
         // Ensure the channels that are emitted are fully loaded and in the correct order
         return page.getLoadedPage(channels);
-    }
-
-    public static Function<Page, Page> identitySelection()
-    {
-        return GET_LOADED_PAGE;
     }
 }
