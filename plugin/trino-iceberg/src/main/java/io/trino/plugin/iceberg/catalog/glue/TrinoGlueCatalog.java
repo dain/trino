@@ -470,7 +470,8 @@ public class TrinoGlueCatalog
             uncheckedCacheGet(glueTableCache, tableName, () -> table);
             List<ColumnMetadata> columns;
             try {
-                columns = getColumnMetadatas(loadTable(session, tableName).schema(), typeManager);
+                org.apache.iceberg.Table icebergTable = loadTable(session, tableName);
+                columns = getColumnMetadatas(icebergTable.schema(), typeManager, org.apache.iceberg.TableUtil.formatVersion(icebergTable));
             }
             catch (RuntimeException e) {
                 // Table may be concurrently deleted
