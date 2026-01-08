@@ -134,7 +134,7 @@ public class EnvMultinodeGcs
     private DockerContainer createSpark(MountableFile credentialsFile)
     {
         String containerGcpCredentialsFile = "/spark/conf/gcp-credentials.json";
-        DockerContainer container = new DockerContainer("ghcr.io/trinodb/testing/spark3-iceberg:" + hadoopImagesVersion, "spark")
+        DockerContainer container = new DockerContainer("ghcr.io/trinodb/testing/spark4-iceberg:" + hadoopImagesVersion, "spark")
                 .withEnv("HADOOP_USER_NAME", "hive")
                 .withCopyFileToContainer(
                         forHostPath(dockerFiles.getDockerFilesHostPath("conf/environment/multinode-gcs/spark-defaults.conf")),
@@ -147,7 +147,7 @@ public class EnvMultinodeGcs
                         "--master", "local[*]",
                         "--class", "org.apache.spark.sql.hive.thriftserver.HiveThriftServer2",
                         "--name", "Thrift JDBC/ODBC Server",
-                        "--packages", "org.apache.spark:spark-avro_2.12:3.2.1",
+                        "--packages", "org.apache.spark:spark-avro_2.12:3.2.1,org.codehaus.jackson:jackson-mapper-asl:1.9.13",
                         "--conf", "spark.hive.server2.thrift.port=" + SPARK_THRIFT_PORT,
                         "spark-internal")
                 .withCopyFileToContainer(credentialsFile, containerGcpCredentialsFile)
